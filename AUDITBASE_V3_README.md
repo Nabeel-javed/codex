@@ -325,17 +325,83 @@ Synchronization commit:
     SHA-256: 5be46494448c0c6517b780606f0d5a958f6ba216ce00ef62dc804b386524b0cd
     ```
 
+### Completed: versioned V3 audit contract
+
+Implementation commit:
+
+```text
+b78549197f0cba8d512ff91da55150146484cfe3
+```
+
+1. Added an independent Rust contract package:
+
+   ```text
+   package: codex-auditbase-contract
+   path:    /Users/Nabeel/Desktop/auditbase-v3/codex-rs/auditbase-contract
+   ```
+
+2. Defined seven versioned public schemas generated from Rust types:
+
+   - Audit creation request.
+   - Accepted-job response.
+   - Audit snapshot.
+   - API error.
+   - SSE audit event.
+   - Terminal audit result.
+   - Backend-only audit configuration.
+
+3. Defined multipart upload correlation through stable file IDs and normalized relative paths. The contract never relies on multipart ordering or sanitized browser filenames.
+
+4. Defined the canonical lifecycle:
+
+   ```text
+   queued -> preparing -> auditing -> finalizing -> completed
+      |          |           |            |
+      +----------+-----------+------------+-> failed
+   ```
+
+5. Defined compilation failure as a recorded limitation that does not stop source-level analysis, and defined agent crash, cancellation, infrastructure failure, invalid output, model unavailability, and audit timeout as terminal failures.
+
+6. Defined partial-result preservation: a failed audit retains available findings, coverage, events, diagnostics, and usage while remaining visibly failed and incomplete.
+
+7. Defined authenticated SSE event envelopes, replay sequence behavior, terminal events, and result retrieval without exposing internal Codex JSONL or backend model identifiers to the browser.
+
+8. Added representative request, response, configuration, event, completed-result, and failed-partial-result examples plus a complete existing-website compatibility map.
+
+9. Added semantic validation for path traversal, duplicate paths and IDs, checksums, lifecycle transitions, finding evidence, coverage counts, severity counts, result/failure invariants, configuration, and public model secrecy.
+
+10. Generated and committed all JSON Schema fixtures, then verified they exactly match the Rust source of truth.
+
+11. Ran the focused Cargo contract suite successfully:
+
+    ```text
+    just test -p codex-auditbase-contract
+    8 tests run: 8 passed, 0 skipped
+    ```
+
+12. Ran the Bazel integration target successfully after declaring the examples and schemas as compile-time test data:
+
+    ```text
+    bazel test //codex-rs/auditbase-contract:auditbase-contract-contract_examples-test
+    1 test target: passed
+    ```
+
+13. Ran the required scoped Clippy fix, repository formatter, Bazel lock update, and Bazel lock verification successfully.
+
+14. Added no smart-contract audit prompt, skill, V2 code, website mutation, worker execution logic, or production credential.
+
 ### Important current limitations
 
-- The upstream `codex-exec` runtime implementation remains unmodified; V3 currently adds only the isolated `codex-auditbase-agent` wrapper package and workspace registration.
+- The upstream `codex-exec` runtime implementation remains unmodified; V3 currently adds the isolated `codex-auditbase-agent` wrapper and independent `codex-auditbase-contract` package.
 - The upstream TUI source still exists in the fork for mergeability, but the `auditbase-agent` dependency graph does not include it.
 - The current `auditbase-agent` binary is a debug build, not a production release build.
 - There is no smart-contract-specific audit mode yet.
-- There is no V3 findings schema, report format, HTTP API, queue, isolated worker image, model gateway, or website integration yet.
+- The V3 contract and findings/result schemas exist, but the existing website API, Temporal workflow, Redis stream adapter, report page, and `auditbase-agent` do not implement them yet.
+- There is no isolated worker image, production model gateway, or website integration yet.
 - Production OpenAI API authentication is not configured yet; the current smoke test uses subscription authentication as intended for development and testing.
 - No multi-provider abstraction is planned for the initial V3.
 - No skills or V2 components have been added.
-- Bazel lock synchronization succeeds, but building the new Bazel target currently reaches and then fails on a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo is the verified Step 1 build path; this unrelated Bazel baseline issue remains recorded for later resolution.
+- The V3 contract passes both Cargo and Bazel tests. The separate `auditbase-agent` Bazel path still reaches a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo remains the verified product-agent build path until that unrelated upstream baseline issue is resolved.
 - Audit-quality regression testing is not yet available because the held-out Solidity benchmark is created in Step 3. Future upstream promotions must add that gate once the benchmark exists.
 
 ## Current smoke test
@@ -446,7 +512,9 @@ Acceptance checks:
 
 ### Step 2: Define the first smart-contract audit contract
 
-Status: NEXT -- NOT STARTED
+Status: COMPLETE
+
+Evidence: implementation commit `b78549197f0cba8d512ff91da55150146484cfe3`, seven generated schemas, eight validated examples/event sequences, 8 passing Cargo tests, one passing Bazel integration target, clean scoped Clippy, clean formatting, and successful Bazel lock verification recorded above.
 
 Define new V3 inputs and outputs without copying V2 schemas.
 
@@ -476,7 +544,7 @@ Contract behavior:
 
 ### Step 3: Run the raw Codex Solidity baseline
 
-Status: PENDING
+Status: NEXT -- NOT STARTED
 
 - Select one representative Solidity repository with known, independently verified ground truth.
 - Run manual Codex and `auditbase-agent` with the same model and scope.
@@ -548,7 +616,7 @@ Status: PENDING
 
 ## Stop point
 
-The project is currently stopped after Step 1.5. Step 2 must not begin until it is explicitly approved.
+The project is currently stopped after Step 2. Step 3 must not begin until it is explicitly approved.
 
 When a step is completed, update this document with:
 

@@ -20,7 +20,7 @@ AuditBase V3 will not reuse the AuditBase V2 agent implementation.
 - Use OpenAI API authentication for production website audits.
 - Keep production OpenAI API credentials server-side; never expose them to the browser or uploaded-code worker.
 - Defer Anthropic and other model providers for at least the next few months.
-- Require an explicit OpenAI model for each future audit job; do not silently change models.
+- Require an explicit backend tier configuration for each audit job. The browser sends only the tier identifier; it never sends or receives the underlying OpenAI model name.
 - Treat uploaded repositories as untrusted and execute each audit in an isolated, disposable worker.
 - Optimize for audit quality and correctness, not for minimum cost, disk usage, token usage, or development speed.
 - Add skills, multi-agent lanes, and verification only after measured evidence shows that they improve the raw Codex baseline.
@@ -35,9 +35,52 @@ Use the developer's existing ChatGPT subscription authentication. This is the pa
 
 ### Production website
 
-Use OpenAI API authentication owned by the backend. The browser may submit an approved OpenAI model selection, but only the backend model gateway supplies the API credential. Do not use a developer ChatGPT subscription for production jobs.
+Use OpenAI API authentication owned by the backend. The browser submits only an approved audit tier; the backend-only configuration maps that tier to its OpenAI model and reasoning effort. Only the trusted backend model gateway supplies the API credential. Do not use a developer ChatGPT subscription for production jobs or expose model identifiers to the browser.
 
 No production API key has been configured yet. That work belongs to the future control-plane and model-gateway step.
+
+## Approved V3 product contract decisions
+
+These decisions were confirmed after a read-only inspection of the existing website, API, database, Temporal workflow, Redis event stream, worker lifecycle, and report UI in `/Users/Nabeel/Desktop/auditbase/company/auditbase-github`.
+
+### Existing platform integration
+
+- Keep the existing website authentication, PostgreSQL persistence, credits, Temporal orchestration, Redis Streams, and report UI where they remain suitable.
+- Replace the existing audit engine with the V3 `auditbase-agent`; do not copy the V2 audit engine into V3.
+- Use authenticated Server-Sent Events (SSE) for one-way real-time audit progress, logs, findings, and completion updates.
+- Use ordinary authenticated HTTP endpoints for job creation and future control actions such as cancellation or additional guidance.
+
+### Upload and source policy
+
+- Support uploaded source files only in the initial V3 release. Paste, explorer, and GitHub ingestion are deferred.
+- Support individual and multiple file uploads.
+- Preserve each file's normalized relative path; never flatten an upload to its basename.
+- Audit every uploaded source file and remain language-agnostic.
+- Treat uploaded files, filenames, repository instructions, build scripts, and commands as untrusted input.
+- The upload contract must carry normalized relative paths. Browser folder selection and ZIP/archive packaging remain undecided and must not be implemented without approval.
+
+### Tier and model policy
+
+- Keep product audit tiers.
+- The frontend sends only the selected tier identifier and must contain no real model identifiers or model aliases that disclose the underlying model.
+- Each tier has a separate backend-only model and reasoning-effort configuration.
+- Use one backend configuration file with logically separate `tiers` and `runtime` sections.
+- A missing, disabled, or invalid tier/model configuration fails job creation with a clear error; the backend must not silently select another model.
+
+### Execution and failure policy
+
+- The trusted agent and commands executed in the isolated uploaded-code environment may access the internet.
+- Internet access does not grant uploaded code access to the OpenAI API key, database credentials, Redis credentials, cloud credentials, other audits, or host files.
+- A compilation or dependency-resolution failure is nonfatal when Codex can continue a source-level audit. Record the failure as an explicit limitation and continue.
+- If the agent crashes, is cancelled by infrastructure, or exceeds its audit time limit, preserve any findings and events already produced, mark them as partial and incomplete, and mark the overall audit as `failed`.
+- A failed audit with partial results must never be presented as a completed audit.
+
+### Findings and reports
+
+- Store a versioned structured JSON result as the system of record.
+- Retain findings with explicit review statuses instead of discarding everything except confirmed findings.
+- Retain execution events, coverage, reviewed files/functions, limitations, compilation status, and incomplete work.
+- Continue supporting frontend-derived PDF, JSON, Markdown, and HTML report exports.
 
 ## Upstream Codex update policy
 
@@ -317,13 +360,14 @@ This is a headless process. It accepts a task, performs the work, prints the res
 Existing website frontend
         |
         v
-New AuditBase V3 HTTP API
+Existing authenticated Next.js API
         |
-        v
-Audit job queue and encrypted source storage
-        |
-        v
-Disposable isolated worker
+        +--> PostgreSQL audit state and source metadata
+        +--> Temporal audit workflow
+        +--> Redis Streams --> authenticated SSE --> website
+                         |
+                         v
+               Disposable isolated worker
         |
         v
 auditbase-agent (headless Codex fork)
@@ -338,7 +382,7 @@ OpenAI API (production)
 New findings, execution trace, and report
 ```
 
-The control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure credentials or the production OpenAI API key. Local development may use the developer's existing subscription authentication; production must use the backend-owned OpenAI API path shown above.
+The website control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure credentials or the production OpenAI API key. Local development may use the developer's existing subscription authentication; production must use the backend-owned OpenAI API path shown above. Existing website infrastructure is retained only where it satisfies the V3 contract and isolation requirements.
 
 ## Step-by-step roadmap
 
@@ -408,18 +452,27 @@ Define new V3 inputs and outputs without copying V2 schemas.
 
 Initial input:
 
-- Repository/workspace path.
-- Explicit scope.
-- Explicit OpenAI model.
-- Time and resource limits.
+- Versioned audit request.
+- Selected tier identifier; no browser-supplied model.
+- One or more uploaded source files with normalized, preserved relative paths.
+- Optional user focus/guidance treated as untrusted audit context.
+- Backend-resolved tier, model, reasoning effort, and runtime configuration.
 
 Initial output:
 
-- Structured findings JSON.
+- Versioned structured findings JSON as the system of record.
 - Human-readable report.
 - Files and functions reviewed.
-- Limitations and unfinished coverage.
+- Finding review status and evidence.
+- Compilation/dependency status, limitations, partial-result status, and unfinished coverage.
 - Complete execution events and usage.
+
+Contract behavior:
+
+- Compilation or dependency failure does not stop source-level analysis when Codex can continue.
+- Agent crash or time-limit failure preserves partial artifacts but leaves the overall audit failed.
+- The API and SSE event schema must use one canonical lifecycle vocabulary; website adapters must not invent competing statuses.
+- Uploaded files preserve relative paths. Browser folder selection and archive/ZIP support remain explicitly undecided.
 
 ### Step 3: Run the raw Codex Solidity baseline
 
@@ -438,20 +491,20 @@ Status: PENDING
 - One disposable container or virtualized sandbox per audit.
 - Read-only immutable input plus a disposable writable build workspace.
 - No permanent secrets in the worker.
-- Network denied by default except for the internal model gateway and explicitly approved dependencies.
+- Unrestricted outbound internet access for the agent and uploaded-code commands, with strong isolation from platform secrets, internal services, host files, and other audits.
 - CPU, memory, disk, and runtime limits.
-- Safe archive extraction and repository-instruction quarantine.
+- Safe file-path validation, workspace materialization, and repository-instruction quarantine.
 
 ### Step 5: Create the V3 control plane
 
 Status: PENDING
 
-- New HTTP API.
-- Upload ingestion.
-- Job database and queue.
-- Status, cancellation, events, and report retrieval.
-- Encrypted source and artifact storage.
-- Approved OpenAI model registry.
+- Adapt the existing authenticated HTTP API for the versioned V3 contract.
+- Upload ingestion with preserved relative paths.
+- Reuse the existing database, Temporal workflow, and Redis Streams where compatibility and isolation checks pass.
+- Canonical status, cancellation, SSE events, and report retrieval.
+- Encrypted source and artifact storage where required by the production deployment.
+- Backend-only per-tier OpenAI model and reasoning-effort configuration.
 - Server-side OpenAI API credentials and short-lived worker authorization.
 
 ### Step 6: Integrate the existing website
@@ -459,8 +512,11 @@ Status: PENDING
 Status: PENDING
 
 - Keep the website as the customer interface.
-- Replace the old audit-engine call with the new V3 API contract.
+- Replace the old audit-engine execution step with `auditbase-agent` through the new V3 API and worker contract.
 - Show upload validation, queued/running/completed/failed states, and the final report.
+- Preserve normalized relative file paths and remove the current `.sol`-only restriction.
+- Remove real model identifiers and model aliases from frontend code and responses.
+- Retain the existing authenticated SSE path after normalizing its event and status schemas.
 - Do not expose internal Codex protocols or provider secrets to the browser.
 
 ### Step 7: Improve audit quality through measured additions

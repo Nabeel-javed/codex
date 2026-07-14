@@ -43,6 +43,7 @@ members = [
     "hooks",
     "http-client",
     "secrets",
+    "auditbase-agent",
     "exec",
     "file-system",
     "exec-server-protocol",

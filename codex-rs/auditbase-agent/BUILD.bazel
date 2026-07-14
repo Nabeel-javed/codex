@@ -1,0 +1,8 @@
+load("//:defs.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    # This binary-only crate cannot reuse the binary target's name for the
+    # enclosing Bazel macro.
+    name = "codex-auditbase-agent",
+    crate_name = "codex_auditbase_agent",
+)

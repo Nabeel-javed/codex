@@ -2249,6 +2249,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-auditbase-agent"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "codex-arg0",
+ "codex-exec",
+ "codex-utils-cli",
+ "pretty_assertions",
+]
+
+[[package]]
 name = "codex-aws-auth"
 version = "0.0.0"
 dependencies = [

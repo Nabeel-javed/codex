@@ -1,0 +1,22 @@
+[package]
+name = "codex-auditbase-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "auditbase-agent"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+codex-arg0 = { workspace = true }
+codex-exec = { workspace = true }
+codex-utils-cli = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

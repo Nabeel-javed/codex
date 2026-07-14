@@ -82,12 +82,13 @@ Automation should eventually check `upstream/main` daily and open an update pull
 Current upstream comparison, verified on 2026-07-14:
 
 ```text
-AuditBase Codex baseline: c39520f3d1522f2587694b52eba7d3eb39460137
-Official upstream/main:   b24aa20107f365a1d0f06de9e0b28df5c516c7dd
-Current difference:       4 upstream commits
+Initial Codex baseline:            c39520f3d1522f2587694b52eba7d3eb39460137
+Verified upstream Codex commit:    b24aa20107f365a1d0f06de9e0b28df5c516c7dd
+AuditBase synchronization commit:  75b0e690fd562c0d2d5d6407132aa45518185d69
+Difference at synchronization:     0 upstream commits
 ```
 
-The latest reference has been fetched, but those commits have not been merged into AuditBase.
+AuditBase contains the latest upstream commit available at the time of this synchronization. Future upstream commits must pass the same promotion process.
 
 ## Current status
 
@@ -217,6 +218,70 @@ Implementation commit:
 
 9. Imported no AuditBase V2 code, prompts, schemas, or orchestration.
 
+### Completed: first upstream synchronization rehearsal
+
+Synchronization commit:
+
+```text
+75b0e690fd562c0d2d5d6407132aa45518185d69
+```
+
+1. Tagged the previous verified AuditBase state for rollback:
+
+   ```text
+   tag:    auditbase-v3-step1-verified
+   commit: c303fd0b876740d41489a2863690282733cc6db9
+   ```
+
+2. Created `sync/codex-20260714-b24aa20107` from the verified AuditBase branch and merged four upstream commits without conflicts.
+
+3. Reviewed the upstream delta: 41 files changed, primarily covering injectable model managers, app-server environment status, and SQLite thread-history projection. No file in `codex-rs/auditbase-agent` changed.
+
+4. Built the synchronized product successfully:
+
+   ```text
+   cargo build -p codex-auditbase-agent
+   ```
+
+5. Ran the available focused and executor compatibility tests:
+
+   ```text
+   just test -p codex-auditbase-agent
+   1 test run: 1 passed, 0 skipped
+
+   just test -p codex-exec
+   129 tests run: 129 passed, 0 skipped
+   ```
+
+6. Verified the product identity and dependency boundary:
+
+   ```text
+   auditbase-agent 0.0.0
+   TUI_DEPENDENCY_ABSENT
+   ```
+
+7. Ran a real subscription-authenticated, read-only repository-tool smoke test. The running agent verified its own package, runtime delegation, and synchronized upstream ancestry, then returned exactly:
+
+   ```text
+   AUDITBASE_V3_SYNC_OK upstream=b24aa20107 binary=auditbase-agent runtime=codex-exec
+   ```
+
+   Smoke-test thread:
+
+   ```text
+   019f5ea5-467f-7cd0-bf09-0dbd68c95852
+   ```
+
+8. Ran `just fmt` successfully with no resulting source changes.
+
+9. Promoted the exact tested synchronization commit to `auditbase-v3` with a fast-forward, preserving the tested commit identity.
+
+10. Verified the synchronized debug binary checksum:
+
+    ```text
+    SHA-256: 5be46494448c0c6517b780606f0d5a958f6ba216ce00ef62dc804b386524b0cd
+    ```
+
 ### Important current limitations
 
 - The upstream `codex-exec` runtime implementation remains unmodified; V3 currently adds only the isolated `codex-auditbase-agent` wrapper package and workspace registration.
@@ -228,6 +293,7 @@ Implementation commit:
 - No multi-provider abstraction is planned for the initial V3.
 - No skills or V2 components have been added.
 - Bazel lock synchronization succeeds, but building the new Bazel target currently reaches and then fails on a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo is the verified Step 1 build path; this unrelated Bazel baseline issue remains recorded for later resolution.
+- Audit-quality regression testing is not yet available because the held-out Solidity benchmark is created in Step 3. Future upstream promotions must add that gate once the benchmark exists.
 
 ## Current smoke test
 
@@ -240,7 +306,7 @@ cd /Users/Nabeel/Desktop/auditbase-v3
   --ephemeral \
   --sandbox read-only \
   --cd "$PWD" \
-  "Use repository inspection tools to read codex-rs/auditbase-agent/Cargo.toml and codex-rs/auditbase-agent/src/main.rs. Verify the package name, binary name, and that the binary delegates to codex_exec::run_main. Then reply with exactly this single line and nothing else: AUDITBASE_V3_AGENT_OK package=codex-auditbase-agent binary=auditbase-agent runtime=codex-exec"
+  "Use repository inspection tools to read codex-rs/auditbase-agent/Cargo.toml, codex-rs/auditbase-agent/src/main.rs, and the current Git commit. Verify the package name, binary name, delegation to codex_exec::run_main, and that commit b24aa20107f365a1d0f06de9e0b28df5c516c7dd is an ancestor of HEAD. Then reply with exactly this single line and nothing else: AUDITBASE_V3_SYNC_OK upstream=b24aa20107 binary=auditbase-agent runtime=codex-exec"
 ```
 
 This is a headless process. It accepts a task, performs the work, prints the result, and exits. It does not open a terminal UI.
@@ -309,7 +375,9 @@ Acceptance checks:
 
 ### Step 1.5: Establish and rehearse upstream synchronization
 
-Status: NEXT -- NOT STARTED
+Status: COMPLETE
+
+Evidence: rollback tag `auditbase-v3-step1-verified`, verified upstream commit `b24aa20107f365a1d0f06de9e0b28df5c516c7dd`, synchronization commit `75b0e690fd562c0d2d5d6407132aa45518185d69`, conflict-free merge, successful Cargo build, 1 passing AuditBase package test, 129 passing `codex-exec` tests, TUI-free dependency graph, exact real-model smoke output, and clean formatting result recorded above.
 
 Work:
 
@@ -334,7 +402,7 @@ Acceptance checks:
 
 ### Step 2: Define the first smart-contract audit contract
 
-Status: PENDING
+Status: NEXT -- NOT STARTED
 
 Define new V3 inputs and outputs without copying V2 schemas.
 
@@ -424,7 +492,7 @@ Status: PENDING
 
 ## Stop point
 
-The project is currently stopped after Step 1. Step 1.5 must not begin until it is explicitly approved. Step 2 follows only after the first upstream synchronization rehearsal passes.
+The project is currently stopped after Step 1.5. Step 2 must not begin until it is explicitly approved.
 
 When a step is completed, update this document with:
 

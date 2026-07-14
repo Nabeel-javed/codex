@@ -262,6 +262,7 @@ impl MessageProcessor {
             ThreadManager::new(
                 config.as_ref(),
                 auth_manager.clone(),
+                codex_core::build_models_manager(config.as_ref(), auth_manager.clone()),
                 session_source,
                 environment_manager,
                 thread_extensions(
@@ -964,6 +965,9 @@ impl MessageProcessor {
             }
             ClientRequest::EnvironmentInfo { params, .. } => {
                 self.environment_processor.environment_info(params).await
+            }
+            ClientRequest::EnvironmentStatus { params, .. } => {
+                self.environment_processor.environment_status(params).await
             }
             ClientRequest::FsReadFile { params, .. } => self
                 .fs_processor

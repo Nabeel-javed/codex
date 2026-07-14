@@ -24,6 +24,8 @@ AuditBase V3 will not reuse the AuditBase V2 agent implementation.
 - Treat uploaded repositories as untrusted and execute each audit in an isolated, disposable worker.
 - Optimize for audit quality and correctness, not for minimum cost, disk usage, token usage, or development speed.
 - Add skills, multi-agent lanes, and verification only after measured evidence shows that they improve the raw Codex baseline.
+- Continuously track official Codex updates, but deploy only an explicitly tested and pinned upstream commit.
+- Never merge or deploy `upstream/main` directly into production without compatibility gates and a rollback artifact.
 
 ## Authentication policy
 
@@ -36,6 +38,56 @@ Use the developer's existing ChatGPT subscription authentication. This is the pa
 Use OpenAI API authentication owned by the backend. The browser may submit an approved OpenAI model selection, but only the backend model gateway supplies the API credential. Do not use a developer ChatGPT subscription for production jobs.
 
 No production API key has been configured yet. That work belongs to the future control-plane and model-gateway step.
+
+## Upstream Codex update policy
+
+OpenAI Codex is an actively changing dependency. AuditBase must distinguish between the latest available Codex commit and the latest AuditBase-verified Codex commit.
+
+```text
+upstream/main (latest available)
+        |
+        v
+isolated sync branch
+        |
+        v
+compatibility and quality gates
+        |
+        v
+auditbase-v3 (latest verified)
+        |
+        v
+pinned immutable production build
+```
+
+Rules:
+
+1. Keep `upstream` fetch-only and never push to the official OpenAI repository.
+2. Fetch upstream changes regularly and before every major AuditBase development step or release.
+3. Create a temporary branch named `sync/codex-<date>-<short-sha>` from the current verified AuditBase branch.
+4. Merge `upstream/main` into the temporary branch. Do not update the verified branch or production directly.
+5. Require the following gates before promotion:
+   - `auditbase-agent` Cargo build.
+   - Relevant package and Codex executor tests.
+   - TUI-free product dependency check.
+   - Local subscription-authenticated repository-tool smoke test.
+   - Audit job schema and website compatibility tests once those interfaces exist.
+   - Held-out smart-contract audit benchmark once the Step 3 benchmark exists.
+6. Record the upstream commit, AuditBase commit, model, configuration, worker image, test results, and benchmark results for every promoted version.
+7. Promote the sync branch through a reviewed merge only when all available gates pass.
+8. Keep the previous immutable production artifact available for immediate rollback.
+9. If an upstream change compiles but reduces audit precision, recall, reliability, isolation, or schema compatibility, keep the current verified version and investigate the update separately.
+
+Automation should eventually check `upstream/main` daily and open an update pull request, but it must never deploy an upstream change automatically.
+
+Current upstream comparison, verified on 2026-07-14:
+
+```text
+AuditBase Codex baseline: c39520f3d1522f2587694b52eba7d3eb39460137
+Official upstream/main:   b24aa20107f365a1d0f06de9e0b28df5c516c7dd
+Current difference:       4 upstream commits
+```
+
+The latest reference has been fetched, but those commits have not been merged into AuditBase.
 
 ## Current status
 
@@ -255,9 +307,34 @@ Acceptance checks:
 - No AuditBase V2 code is present.
 - Relevant tests pass and the Git diff is reviewed before committing.
 
-### Step 2: Define the first smart-contract audit contract
+### Step 1.5: Establish and rehearse upstream synchronization
 
 Status: NEXT -- NOT STARTED
+
+Work:
+
+- Create an isolated sync branch from the verified AuditBase V3 branch.
+- Merge the current four upstream Codex commits into that branch.
+- Review upstream changes and conflicts before modifying AuditBase-owned code.
+- Build and test `auditbase-agent` through the available compatibility gates.
+- Run the real subscription-authenticated repository-tool smoke test.
+- Confirm that the TUI remains absent from the product dependency graph.
+- Merge the verified sync result into `auditbase-v3` and record both commit identities.
+- Define the repeatable commands that future automation will execute.
+
+Acceptance checks:
+
+- The verified AuditBase branch contains the reviewed current upstream commit.
+- `auditbase-agent` builds and its focused tests pass.
+- The real-model smoke test passes with repository tool execution.
+- No AuditBase V2 code is introduced.
+- The product dependency graph remains TUI-free.
+- The previous verified commit remains available as a rollback point.
+- The canonical README records the upstream SHA, resulting AuditBase SHA, commands, tests, and limitations.
+
+### Step 2: Define the first smart-contract audit contract
+
+Status: PENDING
 
 Define new V3 inputs and outputs without copying V2 schemas.
 
@@ -347,7 +424,7 @@ Status: PENDING
 
 ## Stop point
 
-The project is currently stopped after Step 1. Step 2 must not begin until it is explicitly approved.
+The project is currently stopped after Step 1. Step 1.5 must not begin until it is explicitly approved. Step 2 follows only after the first upstream synchronization rehearsal passes.
 
 When a step is completed, update this document with:
 

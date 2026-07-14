@@ -2261,6 +2261,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-auditbase-contract"
+version = "0.0.0"
+dependencies = [
+ "pretty_assertions",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-aws-auth"
 version = "0.0.0"
 dependencies = [

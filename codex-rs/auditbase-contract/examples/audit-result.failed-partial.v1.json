@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "auditbase.audit-result.v1",
+  "auditId": "audit-02-example",
+  "status": "failed",
+  "partial": true,
+  "startedAt": "2026-07-14T11:00:00Z",
+  "finishedAt": "2026-07-14T19:00:00Z",
+  "summary": {
+    "title": "Incomplete example audit",
+    "executiveSummary": "The audit exceeded its configured time limit. One suspected finding was retained, but coverage is incomplete.",
+    "findingCounts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 1,
+      "low": 0,
+      "informational": 0
+    }
+  },
+  "findings": [
+    {
+      "id": "finding-accounting-001",
+      "title": "Accounting invariant may diverge after cancellation",
+      "severity": "medium",
+      "status": "suspected",
+      "confidence": "medium",
+      "category": "accounting",
+      "description": "The cancellation path appears to update aggregate debt without updating the corresponding per-position value.",
+      "impact": "Later operations may use inconsistent debt values.",
+      "recommendation": "Update both coupled accounting values atomically and add an invariant test.",
+      "locations": [
+        {
+          "path": "src/accounting.rs",
+          "startLine": 90,
+          "endLine": 117,
+          "symbol": "cancel_position"
+        }
+      ],
+      "evidence": [],
+      "proof": {
+        "status": "not_attempted",
+        "summary": "The audit timed out before verification completed.",
+        "commands": [],
+        "artifactPaths": []
+      }
+    }
+  ],
+  "coverage": {
+    "submittedFileCount": 2,
+    "reviewedFileCount": 1,
+    "files": [
+      {
+        "path": "src/accounting.rs",
+        "reviewed": true,
+        "functionsReviewed": ["cancel_position"],
+        "notes": []
+      },
+      {
+        "path": "src/settlement.rs",
+        "reviewed": false,
+        "functionsReviewed": [],
+        "notes": ["Not reviewed before the timeout"]
+      }
+    ]
+  },
+  "compilation": {
+    "status": "succeeded",
+    "commands": ["cargo check"],
+    "diagnostics": []
+  },
+  "limitations": [
+    {
+      "code": "audit_timeout",
+      "message": "The audit stopped at the configured tier time limit.",
+      "affectedPaths": ["src/settlement.rs"]
+    }
+  ],
+  "usage": {
+    "inputTokens": 900000,
+    "cachedInputTokens": 600000,
+    "outputTokens": 70000,
+    "reasoningOutputTokens": 25000,
+    "modelRequests": 120,
+    "durationMs": 28800000
+  },
+  "failure": {
+    "code": "audit_timeout",
+    "message": "The audit exceeded its configured time limit.",
+    "retryable": true
+  }
+}

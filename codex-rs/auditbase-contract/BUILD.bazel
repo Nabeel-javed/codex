@@ -1,0 +1,27 @@
+load("//:defs.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    name = "auditbase-contract",
+    compile_data = glob(
+        [
+            "examples/**",
+            "schema/**",
+        ],
+        allow_empty = True,
+    ),
+    crate_name = "codex_auditbase_contract",
+    integration_compile_data_extra = glob(
+        [
+            "examples/**",
+            "schema/**",
+        ],
+        allow_empty = True,
+    ),
+    test_data_extra = glob(
+        [
+            "examples/**",
+            "schema/**",
+        ],
+        allow_empty = True,
+    ),
+)

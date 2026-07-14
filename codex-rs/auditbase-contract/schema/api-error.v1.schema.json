@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ApiErrorResponse",
+  "type": "object",
+  "required": [
+    "code",
+    "message",
+    "retryable",
+    "schemaVersion"
+  ],
+  "properties": {
+    "code": {
+      "$ref": "#/definitions/ApiErrorCode"
+    },
+    "field": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/ApiErrorSchemaVersion"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "ApiErrorCode": {
+      "type": "string",
+      "enum": [
+        "invalid_request",
+        "invalid_path",
+        "invalid_tier",
+        "tier_disabled",
+        "model_unavailable",
+        "upload_limit_exceeded",
+        "unauthorized",
+        "not_found",
+        "conflict",
+        "internal"
+      ]
+    },
+    "ApiErrorSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.api-error.v1"
+      ]
+    }
+  }
+}

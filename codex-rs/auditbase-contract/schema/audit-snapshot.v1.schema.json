@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditSnapshot",
+  "type": "object",
+  "required": [
+    "auditId",
+    "partialResultsAvailable",
+    "resultAvailable",
+    "schemaVersion",
+    "status"
+  ],
+  "properties": {
+    "auditId": {
+      "type": "string"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Failure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "partialResultsAvailable": {
+      "type": "boolean"
+    },
+    "phase": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resultAvailable": {
+      "type": "boolean"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/AuditSnapshotSchemaVersion"
+    },
+    "status": {
+      "$ref": "#/definitions/AuditStatus"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditSnapshotSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-snapshot.v1"
+      ]
+    },
+    "AuditStatus": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "preparing",
+        "auditing",
+        "finalizing",
+        "completed",
+        "failed"
+      ]
+    },
+    "Failure": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/FailureCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailureCode": {
+      "type": "string",
+      "enum": [
+        "agent_crash",
+        "audit_timeout",
+        "cancelled",
+        "infrastructure",
+        "model_unavailable",
+        "invalid_output",
+        "internal"
+      ]
+    }
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditConfig",
+  "type": "object",
+  "required": [
+    "runtime",
+    "schema_version",
+    "tiers"
+  ],
+  "properties": {
+    "runtime": {
+      "$ref": "#/definitions/RuntimeConfig"
+    },
+    "schema_version": {
+      "$ref": "#/definitions/AuditConfigSchemaVersion"
+    },
+    "tiers": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/TierConfig"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditConfigSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-config.v1"
+      ]
+    },
+    "NetworkAccess": {
+      "type": "string",
+      "enum": [
+        "unrestricted"
+      ]
+    },
+    "RuntimeConfig": {
+      "type": "object",
+      "required": [
+        "artifact_retention_hours",
+        "event_retention_hours",
+        "max_concurrent_audits",
+        "max_upload_bytes",
+        "max_upload_files",
+        "network_access",
+        "worker_cpu_cores",
+        "worker_disk_mib",
+        "worker_memory_mib"
+      ],
+      "properties": {
+        "artifact_retention_hours": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "event_retention_hours": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_concurrent_audits": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_upload_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_upload_files": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "network_access": {
+          "$ref": "#/definitions/NetworkAccess"
+        },
+        "worker_cpu_cores": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "worker_disk_mib": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "worker_memory_mib": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "TierConfig": {
+      "type": "object",
+      "required": [
+        "audit_timeout_minutes",
+        "enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "properties": {
+        "audit_timeout_minutes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "description": "Passed to Codex as the model reasoning effort without exposing it publicly.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

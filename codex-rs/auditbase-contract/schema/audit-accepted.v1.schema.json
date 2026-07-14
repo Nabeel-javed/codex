@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditAccepted",
+  "type": "object",
+  "required": [
+    "auditId",
+    "eventsUrl",
+    "resultUrl",
+    "schemaVersion",
+    "status"
+  ],
+  "properties": {
+    "auditId": {
+      "type": "string"
+    },
+    "eventsUrl": {
+      "type": "string"
+    },
+    "resultUrl": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/AuditAcceptedSchemaVersion"
+    },
+    "status": {
+      "$ref": "#/definitions/AuditStatus"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditAcceptedSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-accepted.v1"
+      ]
+    },
+    "AuditStatus": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "preparing",
+        "auditing",
+        "finalizing",
+        "completed",
+        "failed"
+      ]
+    }
+  }
+}

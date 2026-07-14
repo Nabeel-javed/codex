@@ -1,0 +1,553 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditResult",
+  "type": "object",
+  "required": [
+    "auditId",
+    "compilation",
+    "coverage",
+    "findings",
+    "finishedAt",
+    "partial",
+    "schemaVersion",
+    "startedAt",
+    "status",
+    "summary",
+    "usage"
+  ],
+  "properties": {
+    "auditId": {
+      "type": "string"
+    },
+    "compilation": {
+      "$ref": "#/definitions/CompilationReport"
+    },
+    "coverage": {
+      "$ref": "#/definitions/AuditCoverage"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Failure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Finding"
+      }
+    },
+    "finishedAt": {
+      "type": "string"
+    },
+    "limitations": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Limitation"
+      }
+    },
+    "partial": {
+      "type": "boolean"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/AuditResultSchemaVersion"
+    },
+    "startedAt": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/TerminalAuditStatus"
+    },
+    "summary": {
+      "$ref": "#/definitions/AuditSummary"
+    },
+    "usage": {
+      "$ref": "#/definitions/AuditUsage"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditCoverage": {
+      "type": "object",
+      "required": [
+        "files",
+        "reviewedFileCount",
+        "submittedFileCount"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FileCoverage"
+          }
+        },
+        "reviewedFileCount": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "submittedFileCount": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "AuditResultSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-result.v1"
+      ]
+    },
+    "AuditSummary": {
+      "type": "object",
+      "required": [
+        "executiveSummary",
+        "findingCounts",
+        "title"
+      ],
+      "properties": {
+        "executiveSummary": {
+          "type": "string"
+        },
+        "findingCounts": {
+          "$ref": "#/definitions/FindingCounts"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AuditUsage": {
+      "type": "object",
+      "required": [
+        "cachedInputTokens",
+        "durationMs",
+        "inputTokens",
+        "modelRequests",
+        "outputTokens",
+        "reasoningOutputTokens"
+      ],
+      "properties": {
+        "cachedInputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "durationMs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "inputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "modelRequests": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "reasoningOutputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompilationReport": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "commands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diagnostics": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "#/definitions/CompilationStatus"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompilationStatus": {
+      "type": "string",
+      "enum": [
+        "not_attempted",
+        "succeeded",
+        "failed",
+        "partial"
+      ]
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "kind",
+        "summary"
+      ],
+      "properties": {
+        "artifactPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/definitions/EvidenceKind"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceKind": {
+      "type": "string",
+      "enum": [
+        "source",
+        "command",
+        "test",
+        "artifact",
+        "analysis"
+      ]
+    },
+    "Failure": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/FailureCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailureCode": {
+      "type": "string",
+      "enum": [
+        "agent_crash",
+        "audit_timeout",
+        "cancelled",
+        "infrastructure",
+        "model_unavailable",
+        "invalid_output",
+        "internal"
+      ]
+    },
+    "FileCoverage": {
+      "type": "object",
+      "required": [
+        "path",
+        "reviewed"
+      ],
+      "properties": {
+        "functionsReviewed": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "path": {
+          "type": "string"
+        },
+        "reviewed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Finding": {
+      "type": "object",
+      "required": [
+        "category",
+        "confidence",
+        "description",
+        "id",
+        "impact",
+        "proof",
+        "recommendation",
+        "severity",
+        "status",
+        "title"
+      ],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "description": {
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "locations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceLocation"
+          }
+        },
+        "proof": {
+          "$ref": "#/definitions/Proof"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "status": {
+          "$ref": "#/definitions/FindingStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FindingCounts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "informational",
+        "low",
+        "medium"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "high": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "informational": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "low": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "medium": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "FindingStatus": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "suspected",
+        "informational"
+      ]
+    },
+    "Limitation": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "affectedPaths": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Proof": {
+      "type": "object",
+      "required": [
+        "status",
+        "summary"
+      ],
+      "properties": {
+        "artifactPaths": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "#/definitions/ProofStatus"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProofStatus": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "not_attempted",
+        "not_applicable"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational"
+      ]
+    },
+    "SourceLocation": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "endLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "path": {
+          "type": "string"
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "TerminalAuditStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    }
+  }
+}

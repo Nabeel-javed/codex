@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditRequest",
+  "type": "object",
+  "required": [
+    "files",
+    "name",
+    "schemaVersion",
+    "tier"
+  ],
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/UploadFile"
+      }
+    },
+    "guidance": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/AuditRequestSchemaVersion"
+    },
+    "tier": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditRequestSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-request.v1"
+      ]
+    },
+    "UploadFile": {
+      "type": "object",
+      "required": [
+        "fileId",
+        "path",
+        "sha256",
+        "sizeBytes"
+      ],
+      "properties": {
+        "fileId": {
+          "description": "Correlates this manifest entry with multipart field `file.<file_id>`.",
+          "type": "string"
+        },
+        "mediaType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Normalized relative path using `/` separators.",
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

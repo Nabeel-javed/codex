@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "auditbase.audit-request.v1",
+  "name": "Example protocol audit",
+  "tier": "standard",
+  "guidance": "Pay particular attention to authorization and accounting invariants.",
+  "files": [
+    {
+      "fileId": "source-001",
+      "path": "contracts/token/Token.sol",
+      "sizeBytes": 2048,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mediaType": "text/plain"
+    },
+    {
+      "fileId": "source-002",
+      "path": "contracts/interfaces/IToken.sol",
+      "sizeBytes": 512,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mediaType": "text/plain"
+    }
+  ]
+}

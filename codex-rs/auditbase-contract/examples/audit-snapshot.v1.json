@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "auditbase.audit-snapshot.v1",
+  "auditId": "audit-01-example",
+  "status": "auditing",
+  "phase": "vulnerability_analysis",
+  "partialResultsAvailable": true,
+  "resultAvailable": false
+}

@@ -1,0 +1,658 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuditEvent",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/StatusEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/ProgressEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "progress"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/LogEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "log"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/FindingEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "finding"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/Limitation"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "limitation"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/AuditUsage"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "usage"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/CompletedEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "completed"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/FailedEvent"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "failed"
+          ]
+        }
+      }
+    }
+  ],
+  "required": [
+    "auditId",
+    "eventId",
+    "occurredAt",
+    "schemaVersion",
+    "sequence"
+  ],
+  "properties": {
+    "auditId": {
+      "type": "string"
+    },
+    "eventId": {
+      "type": "string"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "$ref": "#/definitions/AuditEventSchemaVersion"
+    },
+    "sequence": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AuditEventSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-event.v1"
+      ]
+    },
+    "AuditResultSchemaVersion": {
+      "type": "string",
+      "enum": [
+        "auditbase.audit-result.v1"
+      ]
+    },
+    "AuditStatus": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "preparing",
+        "auditing",
+        "finalizing",
+        "completed",
+        "failed"
+      ]
+    },
+    "AuditUsage": {
+      "type": "object",
+      "required": [
+        "cachedInputTokens",
+        "durationMs",
+        "inputTokens",
+        "modelRequests",
+        "outputTokens",
+        "reasoningOutputTokens"
+      ],
+      "properties": {
+        "cachedInputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "durationMs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "inputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "modelRequests": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "reasoningOutputTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompletedEvent": {
+      "type": "object",
+      "required": [
+        "resultAvailable",
+        "resultSchemaVersion"
+      ],
+      "properties": {
+        "resultAvailable": {
+          "type": "boolean"
+        },
+        "resultSchemaVersion": {
+          "$ref": "#/definitions/AuditResultSchemaVersion"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "kind",
+        "summary"
+      ],
+      "properties": {
+        "artifactPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/definitions/EvidenceKind"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceKind": {
+      "type": "string",
+      "enum": [
+        "source",
+        "command",
+        "test",
+        "artifact",
+        "analysis"
+      ]
+    },
+    "FailedEvent": {
+      "type": "object",
+      "required": [
+        "failure",
+        "partialResultsAvailable"
+      ],
+      "properties": {
+        "failure": {
+          "$ref": "#/definitions/Failure"
+        },
+        "partialResultsAvailable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Failure": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/FailureCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailureCode": {
+      "type": "string",
+      "enum": [
+        "agent_crash",
+        "audit_timeout",
+        "cancelled",
+        "infrastructure",
+        "model_unavailable",
+        "invalid_output",
+        "internal"
+      ]
+    },
+    "Finding": {
+      "type": "object",
+      "required": [
+        "category",
+        "confidence",
+        "description",
+        "id",
+        "impact",
+        "proof",
+        "recommendation",
+        "severity",
+        "status",
+        "title"
+      ],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "description": {
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "locations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceLocation"
+          }
+        },
+        "proof": {
+          "$ref": "#/definitions/Proof"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "status": {
+          "$ref": "#/definitions/FindingStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FindingEvent": {
+      "type": "object",
+      "required": [
+        "action",
+        "finding"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/definitions/FindingEventAction"
+        },
+        "finding": {
+          "$ref": "#/definitions/Finding"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FindingEventAction": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "updated"
+      ]
+    },
+    "FindingStatus": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "suspected",
+        "informational"
+      ]
+    },
+    "Limitation": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "affectedPaths": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogEvent": {
+      "type": "object",
+      "required": [
+        "level",
+        "message",
+        "source"
+      ],
+      "properties": {
+        "level": {
+          "$ref": "#/definitions/LogLevel"
+        },
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/definitions/LogSource"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogLevel": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "LogSource": {
+      "type": "string",
+      "enum": [
+        "system",
+        "agent",
+        "tool",
+        "build"
+      ]
+    },
+    "ProgressEvent": {
+      "type": "object",
+      "required": [
+        "message",
+        "percentage",
+        "phase"
+      ],
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "percentage": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "phase": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Proof": {
+      "type": "object",
+      "required": [
+        "status",
+        "summary"
+      ],
+      "properties": {
+        "artifactPaths": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "#/definitions/ProofStatus"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProofStatus": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "not_attempted",
+        "not_applicable"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational"
+      ]
+    },
+    "SourceLocation": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "endLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "path": {
+          "type": "string"
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatusEvent": {
+      "type": "object",
+      "required": [
+        "message",
+        "status"
+      ],
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AuditStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/AuditStatus"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

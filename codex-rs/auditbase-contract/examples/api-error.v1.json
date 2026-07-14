@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "auditbase.api-error.v1",
+  "code": "invalid_path",
+  "message": "Uploaded file paths must be normalized relative paths.",
+  "retryable": false,
+  "field": "files[0].path"
+}

@@ -105,17 +105,77 @@ No production API key has been configured yet. That work belongs to the future c
 
 9. Confirmed that both AuditBase V2 repositories remained untouched.
 
+### Completed: AuditBase headless product binary
+
+Implementation commit:
+
+```text
+0c4f0443e6fac12817ffccf6b92a27b4daf91915
+```
+
+1. Added a dedicated Rust package and binary:
+
+   ```text
+   package: codex-auditbase-agent
+   binary:  auditbase-agent
+   path:    /Users/Nabeel/Desktop/auditbase-v3/codex-rs/target/debug/auditbase-agent
+   ```
+
+2. Kept the new binary as a thin headless product boundary over the upstream `codex-exec` library. The Codex agent loop, repository tools, sandbox, sessions, OpenAI model support, and structured-output behavior remain in the maintained upstream runtime instead of being copied.
+
+3. Verified the product identity:
+
+   ```text
+   auditbase-agent 0.0.0
+   ```
+
+4. Inspected the complete normal Cargo dependency graph and confirmed that neither `codex-tui` nor `ratatui` is present.
+
+5. Added and ran a focused regression test for forwarding prompts and root configuration overrides into `codex-exec`:
+
+   ```text
+   just test -p codex-auditbase-agent
+   1 test run: 1 passed, 0 skipped
+   ```
+
+6. Ran the required scoped Clippy fix pass and repository formatter successfully:
+
+   ```text
+   just fix -p codex-auditbase-agent
+   just fmt
+   ```
+
+7. Ran a real authenticated, read-only smoke test through `auditbase-agent`. The agent used repository tools to inspect its own package and entry point, then returned exactly:
+
+   ```text
+   AUDITBASE_V3_AGENT_OK package=codex-auditbase-agent binary=auditbase-agent runtime=codex-exec
+   ```
+
+   Smoke-test thread:
+
+   ```text
+   019f5e8c-76bb-71d3-8d40-f1465621a054
+   ```
+
+8. Verified the compiled debug binary checksum:
+
+   ```text
+   SHA-256: 5f25f26a7db84b9c1fe3b8a5eb25d3ab2910648a3ce1b48cfe8f4fcc524eb98e
+   ```
+
+9. Imported no AuditBase V2 code, prompts, schemas, or orchestration.
+
 ### Important current limitations
 
-- The Codex source is still unmodified.
-- The upstream TUI source still exists in the fork, although it was not built and is not needed by `codex-exec`.
-- The binary is still named `codex-exec`, not `auditbase-agent`.
-- The current binary is a debug build, not a production release build.
+- The upstream `codex-exec` runtime implementation remains unmodified; V3 currently adds only the isolated `codex-auditbase-agent` wrapper package and workspace registration.
+- The upstream TUI source still exists in the fork for mergeability, but the `auditbase-agent` dependency graph does not include it.
+- The current `auditbase-agent` binary is a debug build, not a production release build.
 - There is no smart-contract-specific audit mode yet.
 - There is no V3 findings schema, report format, HTTP API, queue, isolated worker image, model gateway, or website integration yet.
 - Production OpenAI API authentication is not configured yet; the current smoke test uses subscription authentication as intended for development and testing.
 - No multi-provider abstraction is planned for the initial V3.
 - No skills or V2 components have been added.
+- Bazel lock synchronization succeeds, but building the new Bazel target currently reaches and then fails on a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo is the verified Step 1 build path; this unrelated Bazel baseline issue remains recorded for later resolution.
 
 ## Current smoke test
 
@@ -124,11 +184,11 @@ Run from Terminal:
 ```bash
 cd /Users/Nabeel/Desktop/auditbase-v3
 
-./codex-rs/target/debug/codex-exec \
+./codex-rs/target/debug/auditbase-agent \
   --ephemeral \
   --sandbox read-only \
   --cd "$PWD" \
-  "Inspect this repository and briefly explain what codex-rs/exec does."
+  "Use repository inspection tools to read codex-rs/auditbase-agent/Cargo.toml and codex-rs/auditbase-agent/src/main.rs. Verify the package name, binary name, and that the binary delegates to codex_exec::run_main. Then reply with exactly this single line and nothing else: AUDITBASE_V3_AGENT_OK package=codex-auditbase-agent binary=auditbase-agent runtime=codex-exec"
 ```
 
 This is a headless process. It accepts a task, performs the work, prints the result, and exits. It does not open a terminal UI.
@@ -174,7 +234,9 @@ Evidence: source clone, pinned commit, clean branch, successful headless build, 
 
 ### Step 1: Create the AuditBase headless product binary
 
-Status: NEXT -- NOT STARTED
+Status: COMPLETE
+
+Evidence: implementation commit `0c4f0443e6fac12817ffccf6b92a27b4daf91915`, successful Cargo build, successful version command, TUI-free dependency graph, passing focused package test, successful lint and format passes, and exact real-model smoke-test output recorded above.
 
 Work:
 
@@ -195,7 +257,7 @@ Acceptance checks:
 
 ### Step 2: Define the first smart-contract audit contract
 
-Status: PENDING
+Status: NEXT -- NOT STARTED
 
 Define new V3 inputs and outputs without copying V2 schemas.
 
@@ -285,7 +347,7 @@ Status: PENDING
 
 ## Stop point
 
-The project is currently stopped after Step 0. Step 1 must not begin until it is explicitly approved.
+The project is currently stopped after Step 1. Step 2 must not begin until it is explicitly approved.
 
 When a step is completed, update this document with:
 

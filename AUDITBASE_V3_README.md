@@ -15,12 +15,27 @@ AuditBase V3 will not reuse the AuditBase V2 agent implementation.
 - Import no AuditBase V2 agent code, prompts, schemas, scanners, orchestration, persistence, or finalization logic.
 - Use the open-source Codex runtime as the agent foundation.
 - Ship a headless backend agent. The Codex terminal UI is not part of the product.
-- Support OpenAI Responses-compatible model providers for the next few months.
-- Defer native Anthropic support.
-- Require an explicit provider and model for each future audit job; do not silently change models.
+- Use OpenAI models only for the initial V3; do not build a multi-provider abstraction yet.
+- Use the developer's existing ChatGPT subscription authentication only for local development and testing.
+- Use OpenAI API authentication for production website audits.
+- Keep production OpenAI API credentials server-side; never expose them to the browser or uploaded-code worker.
+- Defer Anthropic and other model providers for at least the next few months.
+- Require an explicit OpenAI model for each future audit job; do not silently change models.
 - Treat uploaded repositories as untrusted and execute each audit in an isolated, disposable worker.
 - Optimize for audit quality and correctness, not for minimum cost, disk usage, token usage, or development speed.
 - Add skills, multi-agent lanes, and verification only after measured evidence shows that they improve the raw Codex baseline.
+
+## Authentication policy
+
+### Local development and testing
+
+Use the developer's existing ChatGPT subscription authentication. This is the path already proven by the headless smoke test. Do not add API-key configuration merely for local testing.
+
+### Production website
+
+Use OpenAI API authentication owned by the backend. The browser may submit an approved OpenAI model selection, but only the backend model gateway supplies the API credential. Do not use a developer ChatGPT subscription for production jobs.
+
+No production API key has been configured yet. That work belongs to the future control-plane and model-gateway step.
 
 ## Current status
 
@@ -98,6 +113,8 @@ AuditBase V3 will not reuse the AuditBase V2 agent implementation.
 - The current binary is a debug build, not a production release build.
 - There is no smart-contract-specific audit mode yet.
 - There is no V3 findings schema, report format, HTTP API, queue, isolated worker image, model gateway, or website integration yet.
+- Production OpenAI API authentication is not configured yet; the current smoke test uses subscription authentication as intended for development and testing.
+- No multi-provider abstraction is planned for the initial V3.
 - No skills or V2 components have been added.
 
 ## Current smoke test
@@ -134,16 +151,16 @@ Disposable isolated worker
 auditbase-agent (headless Codex fork)
         |
         v
-Internal model gateway
+Internal OpenAI API gateway
         |
         v
-Approved OpenAI Responses-compatible provider
+OpenAI API (production)
         |
         v
 New findings, execution trace, and report
 ```
 
-The control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure or provider credentials.
+The control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure credentials or the production OpenAI API key. Local development may use the developer's existing subscription authentication; production must use the backend-owned OpenAI API path shown above.
 
 ## Step-by-step roadmap
 
@@ -162,10 +179,11 @@ Status: NEXT -- NOT STARTED
 Work:
 
 - Create an `auditbase-agent` binary based on the working headless executor.
-- Keep the Codex agent loop, repository navigation, tools, sandbox, sessions, model-provider support, and structured-output support.
+- Keep the Codex agent loop, repository navigation, tools, sandbox, sessions, OpenAI model support, and structured-output support.
 - Remove the TUI and interactive Codex surfaces from the AuditBase product build.
 - Keep the untouched upstream history and fetch remote so future Codex changes remain mergeable.
 - Preserve the raw Codex behavior before introducing smart-contract instructions.
+- Preserve the existing subscription-authentication path for local development and testing.
 
 Acceptance checks:
 
@@ -185,8 +203,7 @@ Initial input:
 
 - Repository/workspace path.
 - Explicit scope.
-- Explicit provider profile.
-- Explicit model.
+- Explicit OpenAI model.
 - Time and resource limits.
 
 Initial output:
@@ -227,8 +244,8 @@ Status: PENDING
 - Job database and queue.
 - Status, cancellation, events, and report retrieval.
 - Encrypted source and artifact storage.
-- Approved provider/model registry.
-- Short-lived model-gateway credentials.
+- Approved OpenAI model registry.
+- Server-side OpenAI API credentials and short-lived worker authorization.
 
 ### Step 6: Integrate the existing website
 

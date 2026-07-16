@@ -40,6 +40,28 @@ pub enum ThreadEvent {
 pub struct ThreadStartedEvent {
     /// The identified of the new thread. Can be used to resume the thread later.
     pub thread_id: String,
+    /// Model configured by Codex for this thread before the server responds.
+    ///
+    /// These fields are optional so pinned JSONL produced by older Codex
+    /// versions still deserializes. Consumers that require reproducible runs
+    /// must fail closed when any required configured value is absent. This is
+    /// not proof of the model ultimately reported by the server; production
+    /// provenance must obtain that value from the trusted model gateway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model: Option<String>,
+    /// Model provider configured by Codex for this thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model_provider_id: Option<String>,
+    /// Reasoning effort configured by Codex for this thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reasoning_effort: Option<String>,
+    /// Configured service tier, when one was selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub service_tier: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS, Default)]

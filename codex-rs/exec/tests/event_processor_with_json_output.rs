@@ -133,6 +133,29 @@ fn session_configured_produces_thread_started_event() {
         EventProcessorWithJsonOutput::thread_started_event(&session_configured),
         ThreadEvent::ThreadStarted(ThreadStartedEvent {
             thread_id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_string(),
+            model: Some("codex-mini-latest".to_string()),
+            model_provider_id: Some("test-provider".to_string()),
+            reasoning_effort: None,
+            service_tier: None,
+        })
+    );
+}
+
+#[test]
+fn legacy_thread_started_json_without_effective_configuration_still_deserializes() {
+    let event: ThreadEvent = serde_json::from_str(
+        r#"{"type":"thread.started","thread_id":"67e55044-10b1-426f-9247-bb680e5fe0c8"}"#,
+    )
+    .expect("legacy JSONL should remain readable");
+
+    assert_eq!(
+        event,
+        ThreadEvent::ThreadStarted(ThreadStartedEvent {
+            thread_id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_string(),
+            model: None,
+            model_provider_id: None,
+            reasoning_effort: None,
+            service_tier: None,
         })
     );
 }

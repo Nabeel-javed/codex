@@ -391,6 +391,13 @@ impl EventProcessorWithJsonOutput {
     pub fn thread_started_event(session_configured: &SessionConfiguredEvent) -> ThreadEvent {
         ThreadEvent::ThreadStarted(ThreadStartedEvent {
             thread_id: session_configured.thread_id.to_string(),
+            model: Some(session_configured.model.clone()),
+            model_provider_id: Some(session_configured.model_provider_id.clone()),
+            reasoning_effort: session_configured
+                .reasoning_effort
+                .as_ref()
+                .map(ToString::to_string),
+            service_tier: session_configured.service_tier.clone(),
         })
     }
 

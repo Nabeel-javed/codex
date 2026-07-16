@@ -2,7 +2,10 @@
 
 Canonical status, decisions, and step-by-step delivery plan for the clean-room AuditBase V3 agent.
 
-Last verified: 2026-07-14
+Last verified: 2026-07-16
+
+Detailed evidence, ADRs, benchmark design, security boundaries, and acceptance
+gates: [AuditBase V3 research plan](AUDITBASE_V3_RESEARCH_PLAN.md).
 
 ## Mission
 
@@ -52,25 +55,29 @@ These decisions were confirmed after a read-only inspection of the existing webs
 
 ### Upload and source policy
 
-- Support uploaded source files only in the initial V3 release. Paste, explorer, and GitHub ingestion are deferred.
+- Support file upload as the only initial ingestion channel. Paste, explorer, and GitHub ingestion are deferred.
 - Support individual and multiple file uploads.
 - Preserve each file's normalized relative path; never flatten an upload to its basename.
-- Audit every uploaded source file and remain language-agnostic.
+- Apply no extension allowlist: accept every bounded regular file byte-for-byte, including binary or unfamiliar formats. Unsupported/unreviewed files must produce an explicit limitation.
+- Keep ingestion, execution, schemas, and reporting language-agnostic. Market audit quality for a language/ecosystem only after its own blinded benchmark gate passes; EVM is the first measurement lane.
 - Treat uploaded files, filenames, repository instructions, build scripts, and commands as untrusted input.
-- The upload contract must carry normalized relative paths. Browser folder selection and ZIP/archive packaging remain undecided and must not be implemented without approval.
+- The upload contract must carry normalized relative paths. Special files are rejected. Browser folder selection and ZIP/archive expansion remain undecided and must not be implemented without approval.
+- Until folder selection is approved, the website supports individual or multiple root-level files. The manifest remains nested-path capable and must preserve any relative path supplied by a future folder-aware client.
 
 ### Tier and model policy
 
 - Keep product audit tiers.
 - The frontend sends only the selected tier identifier and must contain no real model identifiers or model aliases that disclose the underlying model.
 - Each tier has a separate backend-only model and reasoning-effort configuration.
-- Use one backend configuration file with logically separate `tiers` and `runtime` sections.
+- Use the versioned `config/auditbase-v3.toml` backend configuration with logically separate `tiers` and `runtime` sections. Validate all enabled tiers at startup and fail closed; store the private config hash and effective model provenance per job. Secrets stay outside the file. Initial changes roll out through reviewed restarts, not hot reload.
 - A missing, disabled, or invalid tier/model configuration fails job creation with a clear error; the backend must not silently select another model.
+- Local ChatGPT subscription testing and production OpenAI API model availability are separate capabilities. The 2026-07-16 test confirmed that an API-candidate model may be unavailable through ChatGPT authentication.
 
 ### Execution and failure policy
 
-- The trusted agent and commands executed in the isolated uploaded-code environment may access the internet.
+- The trusted agent and commands executed in the isolated uploaded-code environment may access broad public internet only through controlled egress that blocks internal, metadata, loopback, private, and control-plane destinations.
 - Internet access does not grant uploaded code access to the OpenAI API key, database credentials, Redis credentials, cloud credentials, other audits, or host files.
+- Broad public egress cannot guarantee confidentiality of the current audit's own source; offer a future restricted-egress mode for that requirement.
 - A compilation or dependency-resolution failure is nonfatal when Codex can continue a source-level audit. Record the failure as an explicit limitation and continue.
 - If the agent crashes, is cancelled by infrastructure, or exceeds its audit time limit, preserve any findings and events already produced, mark them as partial and incomplete, and mark the overall audit as `failed`.
 - A failed audit with partial results must never be presented as a completed audit.
@@ -79,7 +86,7 @@ These decisions were confirmed after a read-only inspection of the existing webs
 
 - Store a versioned structured JSON result as the system of record.
 - Retain findings with explicit review statuses instead of discarding everything except confirmed findings.
-- Retain execution events, coverage, reviewed files/functions, limitations, compilation status, and incomplete work.
+- Retain normalized, versioned, bounded AuditBase events, coverage, reviewed files/functions, limitations, compilation status, and incomplete work. Raw Codex JSONL/reasoning remains private and bounded.
 - Continue supporting frontend-derived PDF, JSON, Markdown, and HTML report exports.
 
 ## Upstream Codex update policy
@@ -114,7 +121,7 @@ Rules:
    - TUI-free product dependency check.
    - Local subscription-authenticated repository-tool smoke test.
    - Audit job schema and website compatibility tests once those interfaces exist.
-   - Held-out smart-contract audit benchmark once the Step 3 benchmark exists.
+   - Held-out smart-contract audit benchmark once the safe benchmark lane and private holdout exist.
 6. Record the upstream commit, AuditBase commit, model, configuration, worker image, test results, and benchmark results for every promoted version.
 7. Promote the sync branch through a reviewed merge only when all available gates pass.
 8. Keep the previous immutable production artifact available for immediate rollback.
@@ -133,7 +140,33 @@ Difference at synchronization:     0 upstream commits
 
 AuditBase contains the latest upstream commit available at the time of this synchronization. Future upstream commits must pass the same promotion process.
 
+Current fetched comparison, verified on 2026-07-16:
+
+```text
+Verified product-code ancestor:     b12e2448b053c1325794a52b94eb420f627d70b8
+Latest fetched upstream/main:       315195492c80fdade38e917c18f9584efd599304
+AuditBase-only commits incl. docs:  11
+Upstream commits not yet promoted:  106
+```
+
+No 2026-07-16 upstream commit was merged. Production and development remain on
+the verified AuditBase head until a temporary sync branch passes the full gate
+set. The only configured remote is the official fetch-only upstream; its push
+URL is disabled and no user-owned GitHub remote exists yet.
+
 ## Current status
+
+### Completed: research and architecture decision record
+
+Status: COMPLETE (documentation and verification only; no product code)
+
+The 2026-07-16 research pass inspected the V3 fork and website, refreshed
+official Codex/OpenAI guidance, designed the isolation boundary and versioned
+backend configuration, selected the `codex exec` JSONL plus final-schema process
+boundary, defined a contamination-aware benchmark/scoring protocol, added
+transactional-outbox delivery, and reordered the roadmap so hostile benchmark
+repositories never execute on the developer host. The full record is in
+`AUDITBASE_V3_RESEARCH_PLAN.md`.
 
 ### Completed: clean Codex baseline
 
@@ -340,7 +373,7 @@ b78549197f0cba8d512ff91da55150146484cfe3
    path:    /Users/Nabeel/Desktop/auditbase-v3/codex-rs/auditbase-contract
    ```
 
-2. Defined seven versioned public schemas generated from Rust types:
+2. Defined seven versioned schemas generated from Rust types:
 
    - Audit creation request.
    - Accepted-job response.
@@ -401,8 +434,12 @@ b78549197f0cba8d512ff91da55150146484cfe3
 - Production OpenAI API authentication is not configured yet; the current smoke test uses subscription authentication as intended for development and testing.
 - No multi-provider abstraction is planned for the initial V3.
 - No skills or V2 components have been added.
+- The latest fetched Codex upstream is 106 commits ahead. It is deliberately not merged because it has not passed the AuditBase sync and benchmark gates.
+- The current fork still has no user-owned GitHub push remote, so commits remain local until that remote is configured intentionally.
 - The V3 contract passes both Cargo and Bazel tests. The separate `auditbase-agent` Bazel path still reaches a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo remains the verified product-agent build path until that unrelated upstream baseline issue is resolved.
-- Audit-quality regression testing is not yet available because the held-out Solidity benchmark is created in Step 3. Future upstream promotions must add that gate once the benchmark exists.
+- Audit-quality regression testing is not yet available because the safe benchmark lane and private holdout do not exist. Future upstream promotions must add that gate once they exist.
+- Exact effective model identity is not emitted in the current JSONL smoke stream. Production provenance recording remains a release-gate requirement.
+- Strict Clippy across all transitive dependencies currently stops on an upstream `large_enum_variant` warning in `core-plugins/src/manifest.rs`; strict `--no-deps` Clippy passes both AuditBase crates.
 
 ## Current smoke test
 
@@ -413,12 +450,23 @@ cd /Users/Nabeel/Desktop/auditbase-v3
 
 ./codex-rs/target/debug/auditbase-agent \
   --ephemeral \
+  --ignore-user-config \
+  --ignore-rules \
+  --json \
   --sandbox read-only \
+  -c project_doc_max_bytes=0 \
   --cd "$PWD" \
-  "Use repository inspection tools to read codex-rs/auditbase-agent/Cargo.toml, codex-rs/auditbase-agent/src/main.rs, and the current Git commit. Verify the package name, binary name, delegation to codex_exec::run_main, and that commit b24aa20107f365a1d0f06de9e0b28df5c516c7dd is an ancestor of HEAD. Then reply with exactly this single line and nothing else: AUDITBASE_V3_SYNC_OK upstream=b24aa20107 binary=auditbase-agent runtime=codex-exec"
+  "Inspect the AuditBase agent package, entry point, current Git HEAD, verified upstream ancestry, and current upstream/main using read-only tools. If they match the recorded values, reply exactly: AUDITBASE_V3_HEALTH_OK head=b12e2448 upstream_verified=b24aa20107 current_upstream=315195492 runtime=codex-exec"
 ```
 
-This is a headless process. It accepts a task, performs the work, prints the result, and exits. It does not open a terminal UI.
+The 2026-07-16 run succeeded as thread
+`019f6ce8-bbfe-7a42-9f7d-329418dbcfdc` with the exact health result above. It
+used Codex's ChatGPT-subscription-supported default model. A preceding explicit
+`gpt-5.6` attempt failed clearly because that model was not supported through
+ChatGPT authentication; production API models must be validated separately.
+
+This is a headless process. It accepts a task, performs the work, prints JSONL
+events and the result, and exits. It does not open a terminal UI.
 
 ## Target system
 
@@ -427,25 +475,25 @@ Existing website frontend
         |
         v
 Existing authenticated Next.js API
+        |-- PostgreSQL audit state, result, and transactional outbox
+        |       `-- idempotent publisher --> Redis Streams --> SSE --> website
         |
-        +--> PostgreSQL audit state and source metadata
-        +--> Temporal audit workflow
-        +--> Redis Streams --> authenticated SSE --> website
-                         |
-                         v
-               Disposable isolated worker
-        |
-        v
-auditbase-agent (headless Codex fork)
-        |
-        v
-Internal OpenAI API gateway
-        |
-        v
-OpenAI API (production)
-        |
-        v
-New findings, execution trace, and report
+        `-- Temporal V3 workflow --> trusted provisioner
+                                      |
+                                      v
+                            Fresh separate-kernel microVM
+                                      |
+                                      v
+                       auditbase-agent (headless Codex fork)
+                                      |
+                                      v
+                         Trusted OpenAI API gateway
+                                      |
+                                      v
+                            OpenAI API (production)
+                                      |
+                                      v
+                    Validated findings, events, and report
 ```
 
 The website control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure credentials or the production OpenAI API key. Local development may use the developer's existing subscription authentication; production must use the backend-owned OpenAI API path shown above. Existing website infrastructure is retained only where it satisfies the V3 contract and isolation requirements.
@@ -522,7 +570,7 @@ Initial input:
 
 - Versioned audit request.
 - Selected tier identifier; no browser-supplied model.
-- One or more uploaded source files with normalized, preserved relative paths.
+- One or more uploaded regular files with normalized, preserved relative paths and byte hashes.
 - Optional user focus/guidance treated as untrusted audit context.
 - Backend-resolved tier, model, reasoning effort, and runtime configuration.
 
@@ -533,7 +581,7 @@ Initial output:
 - Files and functions reviewed.
 - Finding review status and evidence.
 - Compilation/dependency status, limitations, partial-result status, and unfinished coverage.
-- Complete execution events and usage.
+- Normalized, versioned, bounded AuditBase execution events and usage. Raw Codex JSONL and reasoning remain private.
 
 Contract behavior:
 
@@ -542,40 +590,53 @@ Contract behavior:
 - The API and SSE event schema must use one canonical lifecycle vocabulary; website adapters must not invent competing statuses.
 - Uploaded files preserve relative paths. Browser folder selection and archive/ZIP support remain explicitly undecided.
 
-### Step 3: Run the raw Codex Solidity baseline
+### Step 3: Create the safe benchmark lane and evaluator
 
 Status: NEXT -- NOT STARTED
 
-- Select one representative Solidity repository with known, independently verified ground truth.
-- Run manual Codex and `auditbase-agent` with the same model and scope.
-- Confirm that backend automation preserves the manual Codex behavior.
-- Record verified findings, misses, false positives, runtime, and execution traces.
-- Do not add skills until this baseline is understood.
+- Freeze the scoring specification and build offline evaluator fixtures first.
+- Build sanitized, hashed benchmark packages without exposing ground truth to the agent.
+- Implement immutable effective-model/config provenance, the JSONL-to-V3 adapter, bounded result accumulator, and final schema/semantic validator; pass their failure fixtures before a real repository runs.
+- Before any real benchmark source reaches the agent, provide one fresh separate-kernel guest per run, no host or permanent credentials, job-scoped model transport, no public web, bounded resources/output/time, and guaranteed teardown.
+- Prove that repository commands cannot access the model channel, host, other jobs, internal networks, or ground truth.
+- Do not execute hostile benchmark repositories on the developer host.
 
-### Step 4: Create the isolated audit worker
+### Step 4: Run the raw Codex EVM baseline
 
 Status: PENDING
 
-- One disposable container or virtualized sandbox per audit.
+- Run sanitized Kelp only as a harness smoke case, then paired raw `codex exec` and skill-free `auditbase-agent` arms from the same pinned source/image.
+- Use identical model, reasoning, prompt, tools, scope, network, token, and time settings; the wrapper is the only parity treatment.
+- Expand into stratified EVMbench, precision-aware ScaBench cases, Blackhole coverage stress, temporal cases, and finally the private rotating holdout.
+- Record every run, invalid result, match decision, finding, miss, false positive, cost, and uncertainty interval.
+- Keep public web disabled only for anti-contamination benchmark runs; separately test the production controlled-public-egress mode during shadow/security qualification.
+- Do not add an audit skill until wrapper parity and the raw baseline are understood.
+
+### Step 5: Create the production isolated audit worker
+
+Status: PENDING
+
+- One fresh Firecracker/Kata-class microVM or equivalent separate-kernel guest per audit. Ordinary containers are local-development only.
 - Read-only immutable input plus a disposable writable build workspace.
 - No permanent secrets in the worker.
-- Unrestricted outbound internet access for the agent and uploaded-code commands, with strong isolation from platform secrets, internal services, host files, and other audits.
+- Broad public outbound access only through controlled egress that blocks loopback, metadata, private/VPC/cluster networks, redirects/rebinding, platform services, host files, and other audits.
+- Separate the trusted agent/model channel from repository-command UID, process, descriptor, environment, and network access.
 - CPU, memory, disk, and runtime limits.
 - Safe file-path validation, workspace materialization, and repository-instruction quarantine.
 
-### Step 5: Create the V3 control plane
+### Step 6: Create the V3 control plane
 
 Status: PENDING
 
-- Adapt the existing authenticated HTTP API for the versioned V3 contract.
+- Add the separate authenticated `/api/v3/audits` lane for the versioned V3 contract.
 - Upload ingestion with preserved relative paths.
 - Reuse the existing database, Temporal workflow, and Redis Streams where compatibility and isolation checks pass.
-- Canonical status, cancellation, SSE events, and report retrieval.
+- Canonical status, cancellation, bounded SSE events, transactional outbox/reconciliation, and report retrieval.
 - Encrypted source and artifact storage where required by the production deployment.
 - Backend-only per-tier OpenAI model and reasoning-effort configuration.
 - Server-side OpenAI API credentials and short-lived worker authorization.
 
-### Step 6: Integrate the existing website
+### Step 7: Integrate the existing website
 
 Status: PENDING
 
@@ -587,7 +648,7 @@ Status: PENDING
 - Retain the existing authenticated SSE path after normalizing its event and status schemas.
 - Do not expose internal Codex protocols or provider secrets to the browser.
 
-### Step 7: Improve audit quality through measured additions
+### Step 8: Improve audit quality through measured additions
 
 Status: PENDING
 
@@ -602,7 +663,10 @@ Possible additions, each evaluated independently:
 
 An addition remains only if it improves the held-out benchmark without unacceptable precision or reliability regressions.
 
-### Step 8: Production hardening and release
+Add Move, Solana/Rust, Cairo, and other ecosystem lanes only with their own
+toolchain image, private cases, and release gates.
+
+### Step 9: Production hardening and release
 
 Status: PENDING
 
@@ -616,7 +680,9 @@ Status: PENDING
 
 ## Stop point
 
-The project is currently stopped after Step 2. Step 3 must not begin until it is explicitly approved.
+Product implementation is currently stopped after Step 2. The research and
+architecture record is complete, but Step 3 coding must not begin until the user
+explicitly authorizes coding.
 
 When a step is completed, update this document with:
 

@@ -4,12 +4,18 @@ use serde::Serialize;
 
 use crate::AuditResultSchemaVersion;
 use crate::AuditUsage;
+use crate::ContractLimits;
 use crate::Failure;
 use crate::Finding;
 use crate::Limitation;
 use crate::Validate;
+use crate::ValidateWithLimits;
 use crate::ValidationError;
+use crate::validation::require_js_safe_u64;
+use crate::validation::require_max_bytes;
 use crate::validation::require_nonempty;
+use crate::validation::require_rfc3339;
+use crate::validation::require_serialized_max_bytes;
 use crate::validation::require_token;
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]
@@ -55,8 +61,12 @@ impl AuditStatus {
 pub struct AuditEvent {
     pub schema_version: AuditEventSchemaVersion,
     pub event_id: String,
+    #[schemars(range(min = 1, max = 9007199254740991_u64))]
     pub sequence: u64,
     pub audit_id: String,
+    #[schemars(regex(
+        pattern = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$"
+    ))]
     pub occurred_at: String,
     #[serde(flatten)]
     pub payload: AuditEventPayload,
@@ -150,7 +160,14 @@ impl Validate for AuditEvent {
     fn validate(&self) -> Result<(), ValidationError> {
         require_token(&self.event_id, "eventId")?;
         require_token(&self.audit_id, "auditId")?;
-        require_nonempty(&self.occurred_at, "occurredAt")?;
+        if self.sequence == 0 {
+            return Err(ValidationError::new(
+                "sequence",
+                "must be greater than zero",
+            ));
+        }
+        require_js_safe_u64(self.sequence, "sequence")?;
+        require_rfc3339(&self.occurred_at, "occurredAt")?;
         match &self.payload {
             AuditEventPayload::Status(event) => {
                 require_nonempty(&event.message, "data.message")?;
@@ -185,7 +202,7 @@ impl Validate for AuditEvent {
             AuditEventPayload::Limitation(event) => {
                 event.validate_at("data")?;
             }
-            AuditEventPayload::Usage(_) => {}
+            AuditEventPayload::Usage(event) => event.validate_at("data")?,
             AuditEventPayload::Completed(event) => {
                 if !event.result_available {
                     return Err(ValidationError::new(
@@ -197,6 +214,28 @@ impl Validate for AuditEvent {
             AuditEventPayload::Failed(event) => {
                 require_nonempty(&event.failure.message, "data.failure.message")?;
             }
+        }
+        Ok(())
+    }
+}
+
+impl ValidateWithLimits for AuditEvent {
+    fn validate_with_limits(&self, limits: &ContractLimits) -> Result<(), ValidationError> {
+        self.validate()?;
+        require_serialized_max_bytes(self, limits.max_event_bytes, "event")?;
+        match &self.payload {
+            AuditEventPayload::Log(event) => {
+                require_max_bytes(&event.message, limits.max_log_message_bytes, "data.message")?;
+            }
+            AuditEventPayload::Finding(event) => {
+                event.finding.validate_with_limits(limits)?;
+            }
+            AuditEventPayload::Status(_)
+            | AuditEventPayload::Progress(_)
+            | AuditEventPayload::Limitation(_)
+            | AuditEventPayload::Usage(_)
+            | AuditEventPayload::Completed(_)
+            | AuditEventPayload::Failed(_) => {}
         }
         Ok(())
     }

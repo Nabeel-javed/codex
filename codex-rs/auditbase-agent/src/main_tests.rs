@@ -7,7 +7,7 @@ fn top_cli_forwards_root_config_overrides_and_prompt() {
     let cli = TopCli::parse_from([
         "auditbase-agent",
         "--config",
-        "reasoning_level=xhigh",
+        "model_reasoning_effort=high",
         PROMPT,
     ]);
     let mut inner = cli.inner;
@@ -18,6 +18,6 @@ fn top_cli_forwards_root_config_overrides_and_prompt() {
     assert_eq!(inner.prompt.as_deref(), Some(PROMPT));
     assert_eq!(
         inner.config_overrides.raw_overrides,
-        ["reasoning_level=xhigh"]
+        ["model_reasoning_effort=high"]
     );
 }

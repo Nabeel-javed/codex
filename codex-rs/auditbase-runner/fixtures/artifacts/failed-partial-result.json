@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "auditbase.audit-result.v1",
+  "auditId": "audit-fixture",
+  "status": "failed",
+  "partial": true,
+  "startedAt": "2026-07-17T10:00:00.000Z",
+  "finishedAt": "2026-07-17T10:01:00.000Z",
+  "summary": {
+    "title": "Incomplete trusted fixture audit",
+    "executiveSummary": "The trusted synthetic fixture retained partial coverage before failure.",
+    "findingCounts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "informational": 0
+    }
+  },
+  "findings": [],
+  "coverage": {
+    "submittedFileCount": 1,
+    "reviewedFileCount": 0,
+    "files": [
+      {
+        "path": "src/example.sol",
+        "reviewed": false,
+        "functionsReviewed": [],
+        "notes": ["Fixture stopped before review completed."]
+      }
+    ]
+  },
+  "compilation": {
+    "status": "not_attempted",
+    "commands": [],
+    "diagnostics": []
+  },
+  "limitations": [
+    {
+      "code": "trusted_fixture_failure",
+      "message": "The trusted fixture was configured to fail.",
+      "affectedPaths": ["src/example.sol"]
+    }
+  ],
+  "usage": {
+    "inputTokens": 10,
+    "cachedInputTokens": 0,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 2,
+    "reasoningOutputTokens": 1,
+    "modelRequests": 1,
+    "durationMs": 1000
+  },
+  "failure": {
+    "code": "internal",
+    "message": "The trusted fixture was configured to fail.",
+    "retryable": false
+  }
+}

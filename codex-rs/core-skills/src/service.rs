@@ -157,6 +157,9 @@ impl SkillsService {
         input: &SkillsLoadInput,
         fs: Option<Arc<dyn ExecutorFileSystem>>,
     ) -> Vec<SkillRoot> {
+        if !skills_enabled_from_stack(&input.config_layer_stack) {
+            return Vec::new();
+        }
         let mut roots = skill_roots(
             fs,
             &input.config_layer_stack,
@@ -168,6 +171,9 @@ impl SkillsService {
         if !input.bundled_skills_enabled {
             roots.retain(|root| root.scope != SkillScope::System);
         }
+        if !project_skills_enabled_from_stack(&input.config_layer_stack) {
+            roots.retain(|root| root.scope != SkillScope::Repo);
+        }
         roots
     }
 
@@ -177,7 +183,12 @@ impl SkillsService {
         force_reload: bool,
         fs: Option<Arc<dyn ExecutorFileSystem>>,
     ) -> HostSkillsSnapshot {
-        let use_cwd_cache = fs.is_some();
+        let skills_enabled = skills_enabled_from_stack(&input.config_layer_stack);
+        let project_skills_enabled = project_skills_enabled_from_stack(&input.config_layer_stack);
+        // This legacy cache is keyed only by cwd. Do not use it when either new
+        // switch changes root selection, or an enabled snapshot from the same cwd
+        // could leak skills into a disabled session (and vice versa).
+        let use_cwd_cache = fs.is_some() && skills_enabled && project_skills_enabled;
         if use_cwd_cache
             && !force_reload
             && let Some(snapshot) = self.cached_snapshot_for_cwd(&input.cwd)
@@ -185,16 +196,23 @@ impl SkillsService {
             return snapshot;
         }
 
-        let mut roots = skill_roots(
-            fs.clone(),
-            &input.config_layer_stack,
-            &input.cwd,
-            input.effective_skill_roots.clone(),
-            self.extra_roots(),
-        )
-        .await;
+        let mut roots = if skills_enabled {
+            skill_roots(
+                fs.clone(),
+                &input.config_layer_stack,
+                &input.cwd,
+                input.effective_skill_roots.clone(),
+                self.extra_roots(),
+            )
+            .await
+        } else {
+            Vec::new()
+        };
         if !bundled_skills_enabled_from_stack(&input.config_layer_stack) {
             roots.retain(|root| root.scope != SkillScope::System);
+        }
+        if !project_skills_enabled {
+            roots.retain(|root| root.scope != SkillScope::Repo);
         }
         let skill_config_rules = skill_config_rules_from_stack(&input.config_layer_stack);
         let snapshot = HostSkillsSnapshot::new(Arc::new(
@@ -304,6 +322,48 @@ pub fn bundled_skills_enabled_from_stack(
     };
 
     skills.bundled.unwrap_or_default().enabled
+}
+
+/// Global skill-discovery switch. Missing or malformed config preserves the
+/// historical enabled behavior.
+pub fn skills_enabled_from_stack(config_layer_stack: &codex_config::ConfigLayerStack) -> bool {
+    let effective_config = config_layer_stack.effective_config();
+    let Some(skills_value) = effective_config
+        .as_table()
+        .and_then(|table| table.get("skills"))
+    else {
+        return true;
+    };
+    let skills: SkillsConfig = match skills_value.clone().try_into() {
+        Ok(skills) => skills,
+        Err(err) => {
+            warn!("invalid skills config: {err}");
+            return true;
+        }
+    };
+    skills.enabled.unwrap_or(true)
+}
+
+/// Repository skill roots can be disabled independently so a future trusted
+/// AuditBase skill bundle can remain available from a fresh CODEX_HOME.
+pub fn project_skills_enabled_from_stack(
+    config_layer_stack: &codex_config::ConfigLayerStack,
+) -> bool {
+    let effective_config = config_layer_stack.effective_config();
+    let Some(skills_value) = effective_config
+        .as_table()
+        .and_then(|table| table.get("skills"))
+    else {
+        return true;
+    };
+    let skills: SkillsConfig = match skills_value.clone().try_into() {
+        Ok(skills) => skills,
+        Err(err) => {
+            warn!("invalid skills config: {err}");
+            return true;
+        }
+    };
+    skills.project_enabled.unwrap_or(true)
 }
 
 fn config_skills_cache_key(

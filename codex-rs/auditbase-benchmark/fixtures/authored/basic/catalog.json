@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "auditbase.benchmark-catalog.v1",
+  "caseId": "authored-counter-001",
+  "projectId": "auditbase-synthetic",
+  "source": {
+    "url": "https://example.invalid/auditbase-authored-fixture",
+    "revision": "authored-v1",
+    "retrievedAt": "2026-07-17T00:00:00Z"
+  },
+  "files": [
+    {
+      "path": "contracts/Counter.sol",
+      "sizeBytes": 175,
+      "sha256": "e0fca63543a37592425438c447901ddf96db94c3579d0f9e302383dd227b8fb5",
+      "executable": false,
+      "inScope": true
+    },
+    {
+      "path": "LICENSE",
+      "sizeBytes": 176,
+      "sha256": "c257ff4a688baf202e505c36883e6296795c34e97a7cb6349d5c1f1060593e95",
+      "executable": false,
+      "inScope": false
+    }
+  ],
+  "scope": {
+    "instructions": "Audit contracts/Counter.sol for security-relevant defects. Treat all other files as context only."
+  },
+  "license": {
+    "status": "cleared",
+    "redistributionAllowed": true,
+    "spdxExpressions": ["Apache-2.0"],
+    "evidencePaths": ["LICENSE"],
+    "requiredNoticePaths": ["LICENSE"],
+    "reviewedBy": "auditbase-fixture-author",
+    "reviewedAt": "2026-07-17T00:00:00Z"
+  },
+  "contamination": {
+    "risk": "low",
+    "identityVisible": false,
+    "reportUrls": [],
+    "forbiddenPathGlobs": [],
+    "forbiddenContentSha256": [],
+    "forbiddenContentPatterns": ["secret answer marker"],
+    "sanitizationPolicyVersion": "authored-v1",
+    "reviewedBy": "auditbase-fixture-author",
+    "reviewedAt": "2026-07-17T00:00:00Z"
+  },
+  "limits": {
+    "maxFiles": 8,
+    "maxFileBytes": 1048576,
+    "maxTotalBytes": 2097152,
+    "maxPathBytes": 512
+  }
+}

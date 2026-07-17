@@ -31,7 +31,8 @@ pub enum ThreadEvent {
     /// Signals that an item has reached a terminal state—either success or failure.
     #[serde(rename = "item.completed")]
     ItemCompleted(ItemCompletedEvent),
-    /// Represents an unrecoverable error emitted directly by the event stream.
+    /// Represents an error emitted directly by the event stream. Retryable
+    /// errors are advisory and may be followed by more events from the turn.
     #[serde(rename = "error")]
     Error(ThreadErrorEvent),
 }
@@ -109,10 +110,15 @@ pub struct ItemUpdatedEvent {
     pub item: ThreadItem,
 }
 
-/// Fatal error emitted by the stream.
+/// Error emitted by the stream.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 pub struct ThreadErrorEvent {
     pub message: String,
+    /// Whether Codex is retrying the failed operation internally. This
+    /// defaults to false so JSONL emitted by older Codex versions remains
+    /// readable.
+    #[serde(default)]
+    pub will_retry: bool,
 }
 
 /// Canonical representation of a thread item and its domain-specific payload.

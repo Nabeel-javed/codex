@@ -1,0 +1,32 @@
+{
+  "summary": {
+    "title": "Fixture audit",
+    "executiveSummary": "The submitted source was reviewed and no reportable findings were retained.",
+    "findingCounts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "informational": 0
+    }
+  },
+  "findings": [],
+  "coverage": {
+    "submittedFileCount": 1,
+    "reviewedFileCount": 1,
+    "files": [
+      {
+        "path": "src/example.sol",
+        "reviewed": true,
+        "functionsReviewed": ["transfer"],
+        "notes": []
+      }
+    ]
+  },
+  "compilation": {
+    "status": "not_attempted",
+    "commands": [],
+    "diagnostics": []
+  },
+  "limitations": []
+}

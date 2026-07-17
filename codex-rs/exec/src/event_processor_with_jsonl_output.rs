@@ -446,8 +446,13 @@ impl EventProcessorWithJsonOutput {
                     }
                     _ => notification.error.message,
                 };
-                let error = ThreadErrorEvent { message };
-                self.last_critical_error = Some(error.clone());
+                let error = ThreadErrorEvent {
+                    message,
+                    will_retry: notification.will_retry,
+                };
+                if !error.will_retry {
+                    self.last_critical_error = Some(error.clone());
+                }
                 events.push(ThreadEvent::Error(error));
                 CodexStatus::Running
             }
@@ -543,10 +548,12 @@ impl EventProcessorWithJsonOutput {
                                     }
                                     _ => error.message,
                                 },
+                                will_retry: false,
                             })
                             .or_else(|| self.last_critical_error.clone())
                             .unwrap_or_else(|| ThreadErrorEvent {
                                 message: "turn failed".to_string(),
+                                will_retry: false,
                             });
                         events.push(ThreadEvent::TurnFailed(TurnFailedEvent { error }));
                         CodexStatus::InitiateShutdown

@@ -2,6 +2,6 @@
   "schemaVersion": "auditbase.audit-accepted.v1",
   "auditId": "audit-01-example",
   "status": "queued",
-  "eventsUrl": "/api/v1/audits/audit-01-example/stream",
-  "resultUrl": "/api/v1/audits/audit-01-example/result"
+  "eventsUrl": "/api/v3/audits/audit-01-example/stream",
+  "resultUrl": "/api/v3/audits/audit-01-example/result"
 }

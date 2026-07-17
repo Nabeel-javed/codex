@@ -1,0 +1,2 @@
+{"type":"thread.started","thread_id":"thread-missing","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"high","service_tier":null}
+{"type":"turn.started"}

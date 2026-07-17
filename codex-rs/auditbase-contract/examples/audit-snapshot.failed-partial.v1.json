@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "auditbase.audit-snapshot.v1",
+  "auditId": "audit-02-example",
+  "status": "failed",
+  "partialResultsAvailable": true,
+  "resultAvailable": true,
+  "failure": {
+    "code": "audit_timeout",
+    "message": "The audit exceeded its configured time limit.",
+    "retryable": true
+  }
+}

@@ -2244,6 +2244,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-auditbase-benchmark"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "globset",
+ "libc",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "walkdir",
+]
+
+[[package]]
 name = "codex-auditbase-contract"
 version = "0.0.0"
 dependencies = [
@@ -2251,8 +2267,38 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "serde_yaml",
  "thiserror 2.0.18",
+ "toml 0.9.11+spec-1.1.0",
+]
+
+[[package]]
+name = "codex-auditbase-evaluator"
+version = "0.0.0"
+dependencies = [
+ "codex-auditbase-contract",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "codex-auditbase-runner"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "codex-auditbase-contract",
+ "codex-exec",
+ "libc",
+ "pretty_assertions",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml 0.9.11+spec-1.1.0",
 ]
 
 [[package]]

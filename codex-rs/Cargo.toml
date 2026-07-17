@@ -45,6 +45,9 @@ members = [
     "secrets",
     "auditbase-contract",
     "auditbase-agent",
+    "auditbase-runner",
+    "auditbase-evaluator",
+    "auditbase-benchmark",
     "exec",
     "file-system",
     "exec-server-protocol",
@@ -156,6 +159,9 @@ codex-app-server-test-client = { path = "app-server-test-client" }
 codex-apply-patch = { path = "apply-patch" }
 codex-arg0 = { path = "arg0" }
 codex-auditbase-contract = { path = "auditbase-contract" }
+codex-auditbase-runner = { path = "auditbase-runner" }
+codex-auditbase-evaluator = { path = "auditbase-evaluator" }
+codex-auditbase-benchmark = { path = "auditbase-benchmark" }
 codex-async-utils = { path = "async-utils" }
 codex-backend-client = { path = "backend-client" }
 codex-chatgpt = { path = "chatgpt" }

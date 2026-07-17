@@ -3,6 +3,6 @@
   "auditId": "audit-01-example",
   "status": "auditing",
   "phase": "vulnerability_analysis",
-  "partialResultsAvailable": true,
+  "partialResultsAvailable": false,
   "resultAvailable": false
 }

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"thread-fixture","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"high","service_tier":null}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"reasoning-1","type":"reasoning","text":"SECRET_RAW_REASONING_MUST_NOT_LEAK"}}
+{"type":"item.completed","item":{"id":"command-1","type":"command_execution","command":"cat private-source","aggregated_output":"SECRET_COMMAND_OUTPUT_MUST_NOT_LEAK","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"SECRET_MODEL_OUTPUT_MUST_NOT_LEAK"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":20,"cache_write_input_tokens":5,"output_tokens":30,"reasoning_output_tokens":10}}

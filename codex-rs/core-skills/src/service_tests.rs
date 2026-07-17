@@ -2,12 +2,14 @@ use super::*;
 use crate::SkillMetadata;
 use crate::config_rules::resolve_disabled_skill_paths;
 use crate::config_rules::skill_config_rules_from_stack;
+use crate::injection::collect_explicit_skill_mentions;
 use codex_config::CONFIG_TOML_FILE;
 use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
 use codex_config::ConfigRequirementsToml;
 use codex_exec_server::LOCAL_FS;
+use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::test_support::PathBufExt;
 use codex_utils_absolute_path::test_support::PathExt;
@@ -464,6 +466,135 @@ async fn skills_for_cwd_loads_repo_and_user_roots_with_local_fs() {
         .collect::<HashSet<_>>();
     assert!(loaded_names.contains("user-skill"));
     assert!(loaded_names.contains("repo-skill"));
+}
+
+#[tokio::test]
+async fn global_skill_switch_blocks_repo_agents_skills_and_explicit_mentions() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let repo_skill_dir = cwd.path().join(".agents/skills/injected");
+    fs::create_dir_all(&repo_skill_dir).expect("create repo agents skill dir");
+    fs::write(
+        repo_skill_dir.join("SKILL.md"),
+        "---\nname: injected-skill\ndescription: untrusted repo skill\n---\n\n# Body\n",
+    )
+    .expect("write repo agents skill");
+    write_user_skill(&codex_home, "user", "user-skill", "user root");
+
+    let config_layer_stack = config_stack(&codex_home, "[skills]\nenabled = false\n");
+    assert!(!skills_enabled_from_stack(&config_layer_stack));
+    let skills_input = SkillsLoadInput::new(
+        cwd.path().abs(),
+        Vec::new(),
+        config_layer_stack.clone(),
+        bundled_skills_enabled_from_stack(&config_layer_stack),
+    );
+    let skills_service = SkillsService::new(
+        codex_home.path().abs(),
+        /*bundled_skills_enabled*/ false,
+    );
+    let snapshot = skills_service
+        .snapshot_for_cwd(
+            &skills_input,
+            /*force_reload*/ true,
+            Some(Arc::clone(&LOCAL_FS)),
+        )
+        .await;
+    assert!(snapshot.outcome().skills.is_empty());
+
+    let mentioned = collect_explicit_skill_mentions(
+        &[UserInput::Text {
+            text: "run $injected-skill".to_owned(),
+            text_elements: Vec::new(),
+        }],
+        &snapshot.outcome().skills,
+        &snapshot.outcome().disabled_paths,
+        &Default::default(),
+    );
+    assert!(mentioned.is_empty());
+}
+
+#[tokio::test]
+async fn missing_global_skill_switch_preserves_repo_agents_skill_discovery() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let repo_skill_dir = cwd.path().join(".agents/skills/repo");
+    fs::create_dir_all(&repo_skill_dir).expect("create repo agents skill dir");
+    fs::write(
+        repo_skill_dir.join("SKILL.md"),
+        "---\nname: repo-agents-skill\ndescription: repo agents root\n---\n\n# Body\n",
+    )
+    .expect("write repo agents skill");
+
+    let config_layer_stack = config_stack(&codex_home, "");
+    assert!(skills_enabled_from_stack(&config_layer_stack));
+    let skills_input = SkillsLoadInput::new(
+        cwd.path().abs(),
+        Vec::new(),
+        config_layer_stack.clone(),
+        bundled_skills_enabled_from_stack(&config_layer_stack),
+    );
+    let skills_service = SkillsService::new(
+        codex_home.path().abs(),
+        /*bundled_skills_enabled*/ true,
+    );
+    let snapshot = skills_service
+        .snapshot_for_cwd(
+            &skills_input,
+            /*force_reload*/ true,
+            Some(Arc::clone(&LOCAL_FS)),
+        )
+        .await;
+    assert!(
+        snapshot
+            .outcome()
+            .skills
+            .iter()
+            .any(|skill| skill.name == "repo-agents-skill")
+    );
+}
+
+#[tokio::test]
+async fn project_skill_switch_blocks_repo_agents_but_keeps_user_skills() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let repo_skill_dir = cwd.path().join(".agents/skills/repo");
+    fs::create_dir_all(&repo_skill_dir).expect("create repo agents skill dir");
+    fs::write(
+        repo_skill_dir.join("SKILL.md"),
+        "---\nname: repo-agents-skill\ndescription: repo agents root\n---\n\n# Body\n",
+    )
+    .expect("write repo agents skill");
+    write_user_skill(&codex_home, "owned", "owned-skill", "trusted user root");
+
+    let config_layer_stack = config_stack(&codex_home, "[skills]\nproject_enabled = false\n");
+    assert!(skills_enabled_from_stack(&config_layer_stack));
+    assert!(!project_skills_enabled_from_stack(&config_layer_stack));
+    let skills_input = SkillsLoadInput::new(
+        cwd.path().abs(),
+        Vec::new(),
+        config_layer_stack.clone(),
+        bundled_skills_enabled_from_stack(&config_layer_stack),
+    );
+    let skills_service = SkillsService::new(
+        codex_home.path().abs(),
+        /*bundled_skills_enabled*/ true,
+    );
+    let snapshot = skills_service
+        .snapshot_for_cwd(
+            &skills_input,
+            /*force_reload*/ true,
+            Some(Arc::clone(&LOCAL_FS)),
+        )
+        .await;
+    let loaded_names = snapshot
+        .outcome()
+        .skills
+        .iter()
+        .map(|skill| skill.name.as_str())
+        .collect::<HashSet<_>>();
+    assert!(loaded_names.contains("owned-skill"));
+    assert!(!loaded_names.contains("repo-agents-skill"));
 }
 
 #[tokio::test]

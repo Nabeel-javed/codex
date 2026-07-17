@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"thread-failed","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"high","service_tier":null}
+{"type":"turn.started"}
+{"type":"turn.failed","error":{"message":"PRIVATE_UPSTREAM_ERROR"}}

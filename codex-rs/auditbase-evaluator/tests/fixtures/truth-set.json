@@ -1,0 +1,30 @@
+{
+  "caseId": "synthetic-vulnerable",
+  "revision": 1,
+  "truths": [
+    {
+      "truthId": "TRUTH-CRITICAL",
+      "severity": "critical",
+      "rootCause": "authorization is checked against the caller instead of the account owner",
+      "affectedBehavior": "withdraw permits an untrusted caller to debit another account",
+      "materialImpact": "an attacker can steal all deposited assets",
+      "acceptableLocations": [
+        { "path": "src/Vault.sol", "symbol": "withdraw" }
+      ],
+      "inScope": true,
+      "bugFamily": "authorization"
+    },
+    {
+      "truthId": "TRUTH-MEDIUM",
+      "severity": "medium",
+      "rootCause": "the cached exchange rate is not updated after a donation",
+      "affectedBehavior": "the next redemption uses stale accounting state",
+      "materialImpact": "redeemers receive an incorrect asset amount",
+      "acceptableLocations": [
+        { "path": "src/Vault.sol", "symbol": "redeem" }
+      ],
+      "inScope": true,
+      "bugFamily": "accounting"
+    }
+  ]
+}

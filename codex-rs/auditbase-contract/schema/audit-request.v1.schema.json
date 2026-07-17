@@ -19,7 +19,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "minLength": 1
     },
     "name": {
       "type": "string"
@@ -68,6 +69,7 @@
         "sizeBytes": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         }
       },

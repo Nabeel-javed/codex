@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -9,6 +11,7 @@ use codex_auditbase_contract::AuditRequest;
 use codex_auditbase_contract::AuditResult;
 use codex_auditbase_contract::AuditSnapshot;
 use codex_auditbase_contract::AuditStatus;
+use codex_auditbase_contract::MAX_RESULT_BYTES;
 use codex_auditbase_contract::TerminalAuditStatus;
 use codex_auditbase_contract::Validate;
 use codex_auditbase_contract::generated_schemas;
@@ -17,8 +20,10 @@ use pretty_assertions::assert_eq;
 const REQUEST: &str = include_str!("../examples/audit-request.v1.json");
 const ACCEPTED: &str = include_str!("../examples/audit-accepted.v1.json");
 const SNAPSHOT: &str = include_str!("../examples/audit-snapshot.v1.json");
+const COMPLETED_SNAPSHOT: &str = include_str!("../examples/audit-snapshot.completed.v1.json");
+const FAILED_SNAPSHOT: &str = include_str!("../examples/audit-snapshot.failed-partial.v1.json");
 const API_ERROR: &str = include_str!("../examples/api-error.v1.json");
-const CONFIG: &str = include_str!("../examples/audit-config.v1.yaml");
+const CONFIG: &str = include_str!("../examples/audit-config.v1.toml");
 const COMPLETED_RESULT: &str = include_str!("../examples/audit-result.completed.v1.json");
 const FAILED_RESULT: &str = include_str!("../examples/audit-result.failed-partial.v1.json");
 const EVENTS: &str = include_str!("../examples/audit-events.v1.jsonl");
@@ -28,11 +33,13 @@ fn committed_examples_deserialize_and_validate() {
     validate_json::<AuditRequest>(REQUEST);
     validate_json::<AuditAccepted>(ACCEPTED);
     validate_json::<AuditSnapshot>(SNAPSHOT);
+    validate_json::<AuditSnapshot>(COMPLETED_SNAPSHOT);
+    validate_json::<AuditSnapshot>(FAILED_SNAPSHOT);
     validate_json::<ApiErrorResponse>(API_ERROR);
     validate_json::<AuditResult>(COMPLETED_RESULT);
     validate_json::<AuditResult>(FAILED_RESULT);
 
-    let config: AuditConfig = serde_yaml::from_str(CONFIG).expect("config example should parse");
+    let config: AuditConfig = toml::from_str(CONFIG).expect("config example should parse");
     config.validate().expect("config example should validate");
 }
 
@@ -136,12 +143,66 @@ fn public_examples_do_not_disclose_backend_model_configuration() {
 #[test]
 fn committed_schemas_match_rust_types() {
     for (filename, generated) in generated_schemas() {
-        let committed: serde_json::Value = serde_json::from_str(committed_schema(filename))
-            .unwrap_or_else(|error| panic!("committed schema {filename} should parse: {error}"));
         let generated =
-            serde_json::to_value(generated).expect("generated schema should serialize to JSON");
-        assert_eq!(committed, generated, "schema drift in {filename}");
+            serde_json::to_string_pretty(&generated).expect("generated schema should serialize");
+        // Compare the exporter's canonical text. Parsing the largest safe JS
+        // integer through serde_json's default floating-point number mode can
+        // round `9007199254740991.0` down by one and create false schema drift.
+        assert_eq!(
+            committed_schema(filename).trim_end(),
+            generated,
+            "schema drift in {filename}"
+        );
     }
+}
+
+#[test]
+fn audit_event_schema_declares_flattened_type_and_data_properties() {
+    let (_, schema) = generated_schemas()
+        .into_iter()
+        .find(|(filename, _)| *filename == "audit-event.v1.schema.json")
+        .expect("audit event schema should be generated");
+    let schema = serde_json::to_value(schema).expect("schema should serialize");
+
+    assert_eq!(schema["additionalProperties"], false);
+    assert_eq!(schema["properties"]["type"], true);
+    assert_eq!(schema["properties"]["data"], true);
+    let required = schema["required"]
+        .as_array()
+        .expect("required should be an array");
+    assert!(required.iter().any(|value| value == "type"));
+    assert!(required.iter().any(|value| value == "data"));
+    assert!(
+        schema["oneOf"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty())
+    );
+}
+
+#[test]
+fn audit_request_schema_rejects_zero_length_guidance() {
+    let (_, schema) = generated_schemas()
+        .into_iter()
+        .find(|(filename, _)| *filename == "audit-request.v1.schema.json")
+        .expect("audit request schema should be generated");
+    let schema = serde_json::to_value(schema).expect("schema should serialize");
+
+    assert_eq!(schema["properties"]["guidance"]["minLength"], 1);
+}
+
+#[test]
+fn audit_config_schema_caps_results_at_the_runner_boundary() {
+    let (_, schema) = generated_schemas()
+        .into_iter()
+        .find(|(filename, _)| *filename == "audit-config.v1.schema.json")
+        .expect("audit config schema should be generated");
+    let schema = serde_json::to_value(schema).expect("schema should serialize");
+
+    assert_eq!(
+        schema["definitions"]["ContractLimits"]["properties"]["max_result_bytes"]["maximum"]
+            .as_f64(),
+        Some(MAX_RESULT_BYTES as f64)
+    );
 }
 
 fn validate_json<T>(payload: &str)
@@ -156,6 +217,8 @@ where
 }
 
 fn committed_schema(filename: &str) -> &'static str {
+    // Keep committed schemas embedded so drift is detected without filesystem
+    // discovery or working-directory assumptions.
     match filename {
         "audit-request.v1.schema.json" => include_str!("../schema/audit-request.v1.schema.json"),
         "audit-accepted.v1.schema.json" => {

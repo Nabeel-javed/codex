@@ -3,8 +3,8 @@
   "auditId": "audit-01-example",
   "status": "completed",
   "partial": false,
-  "startedAt": "2026-07-14T10:00:00Z",
-  "finishedAt": "2026-07-14T10:42:00Z",
+  "startedAt": "2026-07-14T10:00:00.000Z",
+  "finishedAt": "2026-07-14T10:42:00.000Z",
   "summary": {
     "title": "Example protocol audit",
     "executiveSummary": "The source-level audit completed with one verified authorization finding. Compilation failed because an external dependency was absent, and that limitation is recorded below.",
@@ -89,6 +89,7 @@
   "usage": {
     "inputTokens": 120000,
     "cachedInputTokens": 80000,
+    "cacheWriteInputTokens": 0,
     "outputTokens": 9000,
     "reasoningOutputTokens": 3000,
     "modelRequests": 14,

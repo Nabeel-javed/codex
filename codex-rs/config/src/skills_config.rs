@@ -24,6 +24,17 @@ pub struct SkillConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct SkillsConfig {
+    /// Master switch for all skill discovery and invocation. Defaults to true
+    /// for backward compatibility. Automation handling untrusted repositories
+    /// can set this false to prevent repo skills from becoming instructions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+
+    /// Controls repository/project skill roots while leaving user, admin and
+    /// AuditBase-owned skill roots available. Defaults to true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_enabled: Option<bool>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundled: Option<BundledSkillsConfig>,
 

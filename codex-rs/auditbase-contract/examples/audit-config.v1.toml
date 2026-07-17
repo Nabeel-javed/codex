@@ -1,0 +1,48 @@
+schema_version = "auditbase.audit-config.v1"
+
+[tiers.test]
+enabled = true
+model = "backend-configured-test-model"
+reasoning_effort = "medium"
+audit_timeout_minutes = 30
+
+[tiers.fast]
+enabled = true
+model = "backend-configured-fast-model"
+reasoning_effort = "medium"
+audit_timeout_minutes = 120
+
+[tiers.standard]
+enabled = true
+model = "backend-configured-standard-model"
+reasoning_effort = "high"
+audit_timeout_minutes = 480
+
+[tiers.deep]
+enabled = true
+model = "backend-configured-deep-model"
+reasoning_effort = "high"
+audit_timeout_minutes = 1440
+
+[runtime]
+max_concurrent_audits = 16
+max_upload_files = 10000
+max_upload_bytes = 10737418240
+worker_cpu_cores = 32
+worker_memory_mib = 65536
+worker_disk_mib = 524288
+artifact_retention_hours = 168
+event_retention_hours = 168
+network_access = "controlled_public"
+
+[runtime.contract_limits]
+max_request_bytes = 16777216
+max_guidance_bytes = 65536
+max_event_bytes = 1048576
+max_log_message_bytes = 65536
+max_result_bytes = 67108864
+max_diagnostic_item_bytes = 262144
+max_diagnostics_bytes = 8388608
+max_snippet_bytes = 262144
+max_evidence_item_bytes = 1048576
+max_finding_evidence_bytes = 8388608

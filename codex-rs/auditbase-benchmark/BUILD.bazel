@@ -1,0 +1,19 @@
+load("//:defs.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    # Keep the library target distinct from the `auditbase-benchmark` binary.
+    name = "codex-auditbase-benchmark",
+    compile_data = glob(
+        ["fixtures/**"],
+        allow_empty = True,
+    ),
+    crate_name = "codex_auditbase_benchmark",
+    integration_compile_data_extra = glob(
+        ["fixtures/**"],
+        allow_empty = True,
+    ),
+    test_data_extra = glob(
+        ["fixtures/**"],
+        allow_empty = True,
+    ),
+)

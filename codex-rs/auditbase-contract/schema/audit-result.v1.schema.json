@@ -42,7 +42,8 @@
       }
     },
     "finishedAt": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
     },
     "limitations": {
       "default": [],
@@ -58,7 +59,8 @@
       "$ref": "#/definitions/AuditResultSchemaVersion"
     },
     "startedAt": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
     },
     "status": {
       "$ref": "#/definitions/TerminalAuditStatus"
@@ -136,22 +138,33 @@
         "reasoningOutputTokens"
       ],
       "properties": {
+        "cacheWriteInputTokens": {
+          "default": 0,
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
         "cachedInputTokens": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "durationMs": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "inputTokens": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "modelRequests": {
+          "description": "Number of underlying model API calls. Zero means unavailable when the execution surface does not attest this count (for example, a trusted local subscription-backed Codex run).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
@@ -159,11 +172,13 @@
         "outputTokens": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "reasoningOutputTokens": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         }
       },

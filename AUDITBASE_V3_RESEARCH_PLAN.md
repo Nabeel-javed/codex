@@ -6,6 +6,22 @@ Date: 2026-07-16
 
 Product-code changes in this phase: none
 
+## Implementation-status addendum (2026-07-17)
+
+This file is now a historical research and architecture decision record. The
+implementation has moved beyond the snapshot described under "Honest current
+state": the fork now contains the V3 runner, deterministic evaluator, blinded
+benchmark packager, and additional contract/stream consistency validation, and
+the website repository contains an independent V3 control-plane and Temporal
+lane. Do not use the old commit counts, test counts, upstream-distance figures,
+or "not implemented" checklist below as current operational status.
+
+The maintained implementation inventory, runbooks, safety boundary, upstream
+promotion policy, and honest non-claims are in
+[AUDITBASE_V3_README.md](AUDITBASE_V3_README.md). This addendum does not rewrite
+the original record because preserving the assumptions and evidence that led to
+the architecture is useful during later review.
+
 This document records the evidence-backed direction for AuditBase V3 before
 implementation continues. It is intentionally blunt about what exists, what is
 only specified, what must be measured, and what would block a production

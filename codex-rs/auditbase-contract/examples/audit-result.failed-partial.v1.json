@@ -3,8 +3,8 @@
   "auditId": "audit-02-example",
   "status": "failed",
   "partial": true,
-  "startedAt": "2026-07-14T11:00:00Z",
-  "finishedAt": "2026-07-14T19:00:00Z",
+  "startedAt": "2026-07-14T11:00:00.000Z",
+  "finishedAt": "2026-07-14T19:00:00.000Z",
   "summary": {
     "title": "Incomplete example audit",
     "executiveSummary": "The audit exceeded its configured time limit. One suspected finding was retained, but coverage is incomplete.",
@@ -77,6 +77,7 @@
   "usage": {
     "inputTokens": 900000,
     "cachedInputTokens": 600000,
+    "cacheWriteInputTokens": 0,
     "outputTokens": 70000,
     "reasoningOutputTokens": 25000,
     "modelRequests": 120,

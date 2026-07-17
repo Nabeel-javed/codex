@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "auditbase.audit-snapshot.v1",
+  "auditId": "audit-01-example",
+  "status": "completed",
+  "partialResultsAvailable": false,
+  "resultAvailable": true
+}

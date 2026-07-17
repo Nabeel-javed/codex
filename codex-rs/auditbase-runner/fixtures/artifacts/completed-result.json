@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "auditbase.audit-result.v1",
+  "auditId": "audit-fixture",
+  "status": "completed",
+  "partial": false,
+  "startedAt": "2026-07-17T10:00:00.000Z",
+  "finishedAt": "2026-07-17T10:01:00.000Z",
+  "summary": {
+    "title": "Trusted fixture audit",
+    "executiveSummary": "The trusted synthetic fixture completed without retained findings.",
+    "findingCounts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "informational": 0
+    }
+  },
+  "findings": [],
+  "coverage": {
+    "submittedFileCount": 1,
+    "reviewedFileCount": 1,
+    "files": [
+      {
+        "path": "src/example.sol",
+        "reviewed": true,
+        "functionsReviewed": ["transfer"],
+        "notes": []
+      }
+    ]
+  },
+  "compilation": {
+    "status": "not_attempted",
+    "commands": [],
+    "diagnostics": []
+  },
+  "limitations": [],
+  "usage": {
+    "inputTokens": 100,
+    "cachedInputTokens": 20,
+    "cacheWriteInputTokens": 5,
+    "outputTokens": 30,
+    "reasoningOutputTokens": 10,
+    "modelRequests": 1,
+    "durationMs": 60000
+  }
+}

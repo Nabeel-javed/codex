@@ -1632,6 +1632,7 @@ fn turn_failure_prefers_structured_error_message() {
         CollectedThreadEvents {
             events: vec![ThreadEvent::Error(ThreadErrorEvent {
                 message: "backend failed (request id abc)".to_string(),
+                will_retry: false,
             })],
             status: CodexStatus::Running,
         }
@@ -1658,7 +1659,62 @@ fn turn_failure_prefers_structured_error_message() {
             events: vec![ThreadEvent::TurnFailed(TurnFailedEvent {
                 error: ThreadErrorEvent {
                     message: "backend failed (request id abc)".to_string(),
+                    will_retry: false,
                 },
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+}
+
+#[test]
+fn retryable_stream_error_preserves_retryability_and_allows_completion() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+
+    let retrying = processor.collect_thread_events(ServerNotification::Error(ErrorNotification {
+        error: TurnError {
+            message: "transient backend failure".to_string(),
+            codex_error_info: None,
+            additional_details: None,
+        },
+        will_retry: true,
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+    }));
+    assert_eq!(
+        retrying,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::Error(ThreadErrorEvent {
+                message: "transient backend failure".to_string(),
+                will_retry: true,
+            })],
+            status: CodexStatus::Running,
+        }
+    );
+
+    let serialized = serde_json::to_value(&retrying.events[0]).expect("serialize retry event");
+    assert_eq!(serialized["will_retry"], true);
+
+    let completed = processor.collect_thread_events(ServerNotification::TurnCompleted(
+        TurnCompletedNotification {
+            thread_id: "thread-1".to_string(),
+            turn: Turn {
+                id: "turn-1".to_string(),
+                items_view: codex_app_server_protocol::TurnItemsView::Full,
+                items: Vec::new(),
+                status: TurnStatus::Completed,
+                error: None,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+            },
+        },
+    ));
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: Usage::default(),
             })],
             status: CodexStatus::InitiateShutdown,
         }

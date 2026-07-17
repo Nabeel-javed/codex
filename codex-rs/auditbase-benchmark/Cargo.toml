@@ -1,0 +1,30 @@
+[package]
+name = "codex-auditbase-benchmark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "codex_auditbase_benchmark"
+path = "src/lib.rs"
+
+[[bin]]
+name = "auditbase-benchmark"
+path = "src/bin/auditbase-benchmark.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+globset = { workspace = true }
+libc = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }

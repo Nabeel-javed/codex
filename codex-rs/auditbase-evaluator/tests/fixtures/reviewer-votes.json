@@ -1,0 +1,52 @@
+[
+  {
+    "rubricVersion": "auditbase.scoring.v0",
+    "blindedBatchId": "batch-opaque",
+    "reviewerId": "reviewer-a",
+    "caseId": "synthetic-vulnerable",
+    "candidateId": "F-1",
+    "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "candidateContentSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "clusterId": "cluster-1",
+    "representative": true,
+    "assessment": {
+      "rootCause": "same",
+      "affectedBehavior": "same",
+      "materialImpact": "same",
+      "location": "same_function"
+    },
+    "disposition": {
+      "kind": "matches",
+      "value": { "truth_id": "TRUTH-CRITICAL" }
+    },
+    "actionable": true,
+    "verified": true,
+    "rationale": "The reported authorization failure enables the same withdrawal path.",
+    "evidenceRefs": ["proof.json"]
+  },
+  {
+    "rubricVersion": "auditbase.scoring.v0",
+    "blindedBatchId": "batch-opaque",
+    "reviewerId": "reviewer-b",
+    "caseId": "synthetic-vulnerable",
+    "candidateId": "F-1",
+    "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "candidateContentSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "clusterId": "cluster-1",
+    "representative": true,
+    "assessment": {
+      "rootCause": "same",
+      "affectedBehavior": "same",
+      "materialImpact": "same",
+      "location": "same_function"
+    },
+    "disposition": {
+      "kind": "matches",
+      "value": { "truth_id": "TRUTH-CRITICAL" }
+    },
+    "actionable": true,
+    "verified": true,
+    "rationale": "The root cause and impact are identical.",
+    "evidenceRefs": ["proof.json"]
+  }
+]

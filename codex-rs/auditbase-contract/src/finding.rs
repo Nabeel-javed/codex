@@ -2,10 +2,15 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::ContractLimits;
 use crate::Validate;
+use crate::ValidateWithLimits;
 use crate::ValidationError;
+use crate::validation::require_max_bytes;
 use crate::validation::require_nonempty;
 use crate::validation::require_relative_path;
+use crate::validation::require_serialized_items_max_bytes;
+use crate::validation::require_serialized_max_bytes;
 use crate::validation::require_token;
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]
@@ -118,6 +123,14 @@ impl Validate for Finding {
         require_nonempty(&self.description, "finding.description")?;
         require_nonempty(&self.impact, "finding.impact")?;
         require_nonempty(&self.recommendation, "finding.recommendation")?;
+        let informational_status = self.status == FindingStatus::Informational;
+        let informational_severity = self.severity == Severity::Informational;
+        if informational_status != informational_severity {
+            return Err(ValidationError::new(
+                "finding.status",
+                "informational status must be used if and only if severity is informational",
+            ));
+        }
         if self.status == FindingStatus::Verified && self.evidence.is_empty() {
             return Err(ValidationError::new(
                 "finding.evidence",
@@ -132,6 +145,43 @@ impl Validate for Finding {
             evidence.validate_at(&format!("finding.evidence[{index}]"))?;
         }
         self.proof.validate_at("finding.proof")
+    }
+}
+
+impl ValidateWithLimits for Finding {
+    fn validate_with_limits(&self, limits: &ContractLimits) -> Result<(), ValidationError> {
+        self.validate()?;
+        for (index, location) in self.locations.iter().enumerate() {
+            if let Some(snippet) = &location.snippet {
+                require_max_bytes(
+                    snippet,
+                    limits.max_snippet_bytes,
+                    &format!("finding.locations[{index}].snippet"),
+                )?;
+            }
+        }
+        for (index, evidence) in self.evidence.iter().enumerate() {
+            require_serialized_max_bytes(
+                evidence,
+                limits.max_evidence_item_bytes,
+                &format!("finding.evidence[{index}]"),
+            )?;
+            if let Some(location) = &evidence.location
+                && let Some(snippet) = &location.snippet
+            {
+                require_max_bytes(
+                    snippet,
+                    limits.max_snippet_bytes,
+                    &format!("finding.evidence[{index}].location.snippet"),
+                )?;
+            }
+        }
+        require_serialized_items_max_bytes(
+            &self.evidence,
+            limits.max_finding_evidence_bytes,
+            "finding.evidence",
+        )?;
+        Ok(())
     }
 }
 

@@ -1,5 +1,14 @@
 load("//:defs.bzl", "codex_rust_crate")
 
+filegroup(
+    name = "runner_test_examples",
+    srcs = [
+        "examples/audit-config.v1.toml",
+        "examples/audit-result.completed.v1.json",
+    ],
+    visibility = ["//codex-rs/auditbase-runner:__pkg__"],
+)
+
 codex_rust_crate(
     name = "auditbase-contract",
     compile_data = glob(

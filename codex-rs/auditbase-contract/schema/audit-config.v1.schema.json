@@ -29,16 +29,104 @@
         "auditbase.audit-config.v1"
       ]
     },
+    "ContractLimits": {
+      "type": "object",
+      "required": [
+        "max_diagnostic_item_bytes",
+        "max_diagnostics_bytes",
+        "max_event_bytes",
+        "max_evidence_item_bytes",
+        "max_finding_evidence_bytes",
+        "max_guidance_bytes",
+        "max_log_message_bytes",
+        "max_request_bytes",
+        "max_result_bytes",
+        "max_snippet_bytes"
+      ],
+      "properties": {
+        "max_diagnostic_item_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_diagnostics_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_event_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_evidence_item_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_finding_evidence_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_guidance_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_log_message_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_request_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        },
+        "max_result_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 268435456.0,
+          "minimum": 0.0
+        },
+        "max_snippet_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "NetworkAccess": {
       "type": "string",
       "enum": [
-        "unrestricted"
+        "controlled_public",
+        "benchmark_model_only"
+      ]
+    },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
       ]
     },
     "RuntimeConfig": {
       "type": "object",
       "required": [
         "artifact_retention_hours",
+        "contract_limits",
         "event_retention_hours",
         "max_concurrent_audits",
         "max_upload_bytes",
@@ -54,6 +142,9 @@
           "format": "uint32",
           "minimum": 0.0
         },
+        "contract_limits": {
+          "$ref": "#/definitions/ContractLimits"
+        },
         "event_retention_hours": {
           "type": "integer",
           "format": "uint32",
@@ -67,6 +158,7 @@
         "max_upload_bytes": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "max_upload_files": {
@@ -85,11 +177,13 @@
         "worker_disk_mib": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         },
         "worker_memory_mib": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991.0,
           "minimum": 0.0
         }
       },
@@ -117,7 +211,11 @@
         },
         "reasoning_effort": {
           "description": "Passed to Codex as the model reasoning effort without exposing it publicly.",
-          "type": "string"
+          "allOf": [
+            {
+              "$ref": "#/definitions/ReasoningEffort"
+            }
+          ]
         }
       },
       "additionalProperties": false

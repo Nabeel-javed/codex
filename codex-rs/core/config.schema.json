@@ -2914,8 +2914,16 @@
           },
           "type": "array"
         },
+        "enabled": {
+          "description": "Master switch for all skill discovery and invocation. Defaults to true for backward compatibility. Automation handling untrusted repositories can set this false to prevent repo skills from becoming instructions.",
+          "type": "boolean"
+        },
         "include_instructions": {
           "description": "Whether turns receive the automatic skills instructions block.",
+          "type": "boolean"
+        },
+        "project_enabled": {
+          "description": "Controls repository/project skill roots while leaving user, admin and AuditBase-owned skill roots available. Defaults to true.",
           "type": "boolean"
         }
       },

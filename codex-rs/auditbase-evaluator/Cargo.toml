@@ -1,0 +1,22 @@
+[package]
+name = "codex-auditbase-evaluator"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+name = "codex_auditbase_evaluator"
+path = "src/lib.rs"
+
+[dependencies]
+codex-auditbase-contract = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

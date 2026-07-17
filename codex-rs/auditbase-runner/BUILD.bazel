@@ -1,0 +1,18 @@
+load("//:defs.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    name = "auditbase-runner",
+    compile_data = glob(
+        ["fixtures/**"],
+        allow_empty = False,
+    ) + ["//codex-rs/auditbase-contract:runner_test_examples"],
+    crate_name = "codex_auditbase_runner",
+    integration_compile_data_extra = glob(
+        ["fixtures/**"],
+        allow_empty = False,
+    ) + ["//codex-rs/auditbase-contract:runner_test_examples"],
+    test_data_extra = glob(
+        ["fixtures/**"],
+        allow_empty = False,
+    ) + ["//codex-rs/auditbase-contract:runner_test_examples"],
+)

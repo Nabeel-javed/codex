@@ -6,9 +6,13 @@ This contract contains no V2 audit logic, smart-contract prompt, persistence imp
 
 ## V1 scope
 
+V1 remains a pre-release contract until the hardening and cross-language
+conformance gates pass. Tightening its semantics before website integration does
+not imply that a deployed V1 may later be reinterpreted.
+
 - File uploads only.
-- Individual or multiple source files.
-- Language-agnostic file content.
+- Individual or multiple regular files, including zero-byte files.
+- Extension- and language-agnostic file content.
 - Preserved normalized relative paths.
 - Backend-only tier-to-model configuration.
 - Authenticated HTTP job operations.
@@ -24,16 +28,16 @@ The existing website API owns authentication, authorization, credits, persistenc
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/audits` | Validate an upload and enqueue an audit. |
-| `GET` | `/api/v1/audits/{auditId}` | Return `AuditSnapshot`. |
-| `GET` | `/api/v1/audits/{auditId}/stream` | Stream `AuditEvent` records over SSE. |
-| `GET` | `/api/v1/audits/{auditId}/result` | Return `AuditResult` after completion or a failed partial run. |
+| `POST` | `/api/v3/audits` | Validate an upload and enqueue an audit. |
+| `GET` | `/api/v3/audits/{auditId}` | Return `AuditSnapshot`. |
+| `GET` | `/api/v3/audits/{auditId}/stream` | Stream `AuditEvent` records over SSE. |
+| `GET` | `/api/v3/audits/{auditId}/result` | Return `AuditResult` after completion or a failed partial run. |
 
 The browser never calls Codex or OpenAI directly.
 
 ### Create request
 
-`POST /api/v1/audits` uses `multipart/form-data`:
+`POST /api/v3/audits` uses `multipart/form-data`:
 
 1. A required `request` part with media type `application/json` containing `AuditRequest`.
 2. One binary part per manifest entry, named `file.<fileId>`.
@@ -64,20 +68,38 @@ Every uploaded path must:
 - Use `/` separators on every operating system.
 - Contain no empty, `.` or `..` components.
 - Contain no backslash, NUL, drive-letter separator, or absolute prefix.
-- Be unique within the audit after normalization.
+- Be unique within the audit after normalization and Unicode lowercasing.
 
 The worker materializes files beneath a new disposable workspace and performs a containment check before every write. It never flattens paths to basenames.
 
 ## Backend configuration
 
-There is one backend-only configuration file with two sections:
+There is one backend-only TOML configuration file with two sections. Its exact
+bytes are SHA-256 pinned per audit, so every control-plane and runner process
+must load the same absolute file rather than reserialize it:
 
-- `tiers`: public tier identifiers mapped to private model, reasoning effort, enabled state, and audit timeout.
-- `runtime`: concurrency, upload, worker resource, retention, and network settings.
+- `tiers`: public tier identifiers mapped to private model, reasoning effort, enabled state, and audit timeout. The initial timeout maximum is 1,680 minutes (28 hours), leaving cleanup and finalization reserve inside the worker's 30-hour hard process boundary.
+- `runtime`: concurrency, upload, worker resource, retention, network, and
+  contract-size settings.
 
 The frontend sends only a tier identifier. Model identifiers and reasoning effort must not appear in browser bundles, public API responses, SSE events, audit results, or report exports.
 
-The V1 network policy is `unrestricted`, as approved. Isolation remains mandatory: uploaded code receives no OpenAI, database, Redis, cloud, or cross-audit credentials.
+Production uses `controlled_public`; benchmark jobs use `benchmark_model_only`.
+Isolation remains mandatory: uploaded code receives no OpenAI, database, Redis,
+cloud, or cross-audit credentials.
+
+Contract limits cap the serialized request, event, and result plus guidance,
+logs, snippets, per-item and aggregate diagnostics, and per-item and per-finding
+evidence. The trusted runner enforces raw byte limits before deserialization and
+then calls the semantic limit validators. `max_result_bytes` cannot exceed the
+runner's canonical 256 MiB hard model-output boundary.
+
+Every public `u64` is limited to JavaScript's maximum safe integer
+(`9007199254740991`) in both semantic validation and the committed schemas.
+Optional guidance must be non-empty when present; omit it when no guidance was
+provided. The JSON Schema rejects zero-length strings with `minLength: 1`, and
+Rust semantic validation remains authoritative for rejecting whitespace-only
+guidance.
 
 ## Canonical lifecycle
 
@@ -113,7 +135,9 @@ Compilation is evidence, not a prerequisite for source review.
 - `partial` means only part of a multi-language or multi-package workspace compiled.
 - `not_attempted` means no applicable compiler was run.
 
-A failed or partial compilation does not fail the audit when Codex can continue source-level review. The final result records diagnostics and at least one limitation describing reduced verification confidence.
+A failed or partial compilation does not fail the audit when Codex can continue
+source-level review. A failed compilation requires limitation code
+`compilation_failed`; a partial compilation requires `compilation_partial`.
 
 ## Failure and partial-result behavior
 
@@ -127,6 +151,8 @@ When the agent crashes, is cancelled, times out, or loses required infrastructur
 6. Never display the result as a completed audit.
 
 A completed result must have `partial: false` and no failure object.
+A failed result must have `partial: true`; a failure before any retainable result
+instead exposes no result.
 
 ## SSE protocol
 
@@ -151,7 +177,11 @@ Event payload types are:
 
 Requirements:
 
-- `sequence` is strictly increasing within an audit.
+- `sequence` starts at 1 and is contiguous within an audit; gaps and duplicates
+  are invalid.
+- Every timestamp uses exactly uppercase UTC with millisecond precision:
+  `YYYY-MM-DDTHH:MM:SS.sssZ`. Offsets, lowercase suffixes, missing or extra
+  fractional digits, and leap-second spellings are rejected.
 - `eventId` is stable and unique within an audit.
 - Events are append-only and replayable during the configured retention period.
 - The endpoint accepts the standard `Last-Event-ID` header and resumes after that sequence.
@@ -161,6 +191,23 @@ Requirements:
 - The completion event does not embed the full report; the browser fetches `resultUrl`.
 
 Codex JSONL events are internal worker input. The worker adapter translates them into this stable product event contract so upstream Codex event changes do not become browser breaking changes.
+
+The full-stream validator treats `AuditAccepted` as establishing `queued`. Status
+events must then form one contiguous lifecycle, finding updates must follow a
+discovery with the same stable ID, timestamps cannot move backwards, and the
+final status/payload/snapshot/result must agree.
+
+For a retained result, the event stream must reproduce findings in discovery
+order with their latest state, limitations in exact result order, and total
+usage as the checked sum of usage deltas. Missing or mismatched result state is
+invalid. Finding or limitation events are invalid when no result is retained;
+usage may still be preserved for a failure without a partial result.
+
+Termination is deliberately represented by two consecutive records: first the
+final `status` transition (`finalizing -> completed` or any non-terminal state
+`-> failed`), then exactly one matching `completed` or `failed` payload as the
+last record. The status transition updates lifecycle state; the terminal payload
+announces durable result availability and closes SSE after delivery.
 
 ## Finding contract
 
@@ -180,6 +227,7 @@ Finding review statuses:
 - `informational`: retained contextual or hardening observation.
 
 Confidence uses `high`, `medium`, or `low`. Severity uses `critical`, `high`, `medium`, `low`, or `informational` so the existing report UI can preserve all current severity lanes.
+Informational review status is valid if and only if severity is informational.
 
 Rejected candidates are not silently converted into findings. The future audit execution trace may retain candidate investigation history separately; the V1 report contains only retained findings with the statuses above.
 
@@ -203,7 +251,7 @@ The result intentionally excludes the model identifier. Reproducibility metadata
 | Existing component | V1 behavior |
 | --- | --- |
 | Next.js upload page | Remove `.sol` restriction; create a manifest with stable file IDs and preserved relative paths. |
-| `POST /api/v1/audits` | Parse multipart request, validate contract, resolve tier server-side, persist files, and start Temporal. |
+| `POST /api/v3/audits` | Parse multipart request, validate contract, resolve tier server-side, persist files, and start Temporal. |
 | Prisma `AuditFile.filePath` | Store validated manifest `path`; never assign `File.name` as the authoritative path. |
 | Prisma `Audit.status` | Store canonical status values only for V1 jobs. |
 | Prisma `Audit.results` | Store serialized `AuditResult`. |

@@ -2,6 +2,18 @@ use super::*;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn skills_global_switch_is_optional_and_parses_false() {
+    let disabled: SkillsConfig = toml::from_str("enabled = false\nproject_enabled = false\n")
+        .expect("skills config should parse");
+    assert_eq!(disabled.enabled, Some(false));
+    assert_eq!(disabled.project_enabled, Some(false));
+
+    let defaulted: SkillsConfig = toml::from_str("").expect("empty skills config should parse");
+    assert_eq!(defaulted.enabled, None);
+    assert_eq!(defaulted.project_enabled, None);
+}
+
+#[test]
 fn deserialize_skill_config_with_name_selector() {
     let cfg: SkillConfig = toml::from_str(
         r#"

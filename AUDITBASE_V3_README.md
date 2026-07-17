@@ -1,693 +1,396 @@
 # AuditBase V3
 
-Canonical status, decisions, and step-by-step delivery plan for the clean-room AuditBase V3 agent.
+AuditBase V3 is a backend-only, headless audit engine built as a maintainable
+fork of OpenAI Codex. The fork supplies Codex's repository navigation, tool
+execution, model loop, and non-interactive runtime; AuditBase supplies the
+versioned audit contract, orchestration boundary, result validation, isolation
+policy, and deterministic evaluation tooling.
 
-Last verified: 2026-07-16
+V3 is a clean implementation. It does not import the AuditBase V2/Hound audit
+engine, prompts, scanners, schemas, persistence, or orchestration.
 
-Detailed evidence, ADRs, benchmark design, security boundaries, and acceptance
-gates: [AuditBase V3 research plan](AUDITBASE_V3_RESEARCH_PLAN.md).
+> **Current safety boundary:** the implemented end-to-end execution lane is for
+> explicitly authored, trusted local fixtures only. Production execution of
+> untrusted customer uploads is intentionally fail closed until the production
+> gates in this document are implemented and independently attested.
 
-## Mission
+The original research record and decision rationale remain in
+[AUDITBASE_V3_RESEARCH_PLAN.md](AUDITBASE_V3_RESEARCH_PLAN.md). This README is
+the operational source of truth for the implementation.
 
-Build a backend-only smart-contract auditing product on the open-source Codex runtime. The existing website will eventually submit uploaded source code to this new backend, which will run an isolated audit and return structured findings and a report.
+## What exists
 
-AuditBase V3 will not reuse the AuditBase V2 agent implementation.
+| Component | Location | Responsibility |
+| --- | --- | --- |
+| Headless agent | `codex-rs/auditbase-agent` | Thin product binary over upstream `codex-exec`; no TUI dependency in the product graph. |
+| Public contract | `codex-rs/auditbase-contract` | Strict Rust types, semantic validators, stream/result consistency checks, generated JSON Schemas, and examples. |
+| Runner boundary | `codex-rs/auditbase-runner` | Reference-only child protocol, bounded JSONL, workspace verification, Codex launch, result validation, artifact publication, and private provenance. |
+| Evaluator | `codex-rs/auditbase-evaluator` | Deterministic, human-adjudicated matching and exact-rational scoring outside the agent trust boundary. |
+| Benchmark packager | `codex-rs/auditbase-benchmark` | Offline, blinded, license/contamination-gated source packaging; never runs source or exposes truth to the agent. |
+| Website/control plane | Separate `auditbase-github` repository | Auth, upload, private config, PostgreSQL state, Temporal dispatch, outbox, Redis/SSE, and terminal persistence. |
+| Temporal worker | `auditbase-github/workers/src/v3` | Reference-only workflow, authenticated control-plane bridge, runner supervision, cancellation, cleanup, and recovery. |
 
-## Non-negotiable decisions
+The upstream Codex TUI and other surfaces remain in the fork so upstream merges
+stay reviewable. AuditBase does not ship the TUI as its V3 backend. Removing
+unrelated upstream source would increase merge risk without improving the
+product boundary.
 
-- Import no AuditBase V2 agent code, prompts, schemas, scanners, orchestration, persistence, or finalization logic.
-- Use the open-source Codex runtime as the agent foundation.
-- Ship a headless backend agent. The Codex terminal UI is not part of the product.
-- Use OpenAI models only for the initial V3; do not build a multi-provider abstraction yet.
-- Use the developer's existing ChatGPT subscription authentication only for local development and testing.
-- Use OpenAI API authentication for production website audits.
-- Keep production OpenAI API credentials server-side; never expose them to the browser or uploaded-code worker.
-- Defer Anthropic and other model providers for at least the next few months.
-- Require an explicit backend tier configuration for each audit job. The browser sends only the tier identifier; it never sends or receives the underlying OpenAI model name.
-- Treat uploaded repositories as untrusted and execute each audit in an isolated, disposable worker.
-- Optimize for audit quality and correctness, not for minimum cost, disk usage, token usage, or development speed.
-- Add skills, multi-agent lanes, and verification only after measured evidence shows that they improve the raw Codex baseline.
-- Continuously track official Codex updates, but deploy only an explicitly tested and pinned upstream commit.
-- Never merge or deploy `upstream/main` directly into production without compatibility gates and a rollback artifact.
+## Architecture
 
-## Authentication policy
+```text
+authenticated browser
+        |
+        | multipart source upload + public V1 contract
+        v
+Next.js V3 API / control plane
+        |-- exact config digest + private tier resolution
+        |-- PostgreSQL V3 tables + transactional outbox
+        |-- local artifact/workspace storage (trusted-local only)
+        |
+        +--> outbox publisher --> Redis Stream --> authenticated SSE
+        |
+        +--> Temporal: AuditV3Workflow (references only)
+                    |
+                    v
+              Python V3 worker host
+                    |  auditbase.runner.v1 over bounded JSONL
+                    v
+              auditbase-v3-runner
+                    |-- verifies config, request, workspace and file digests
+                    |-- creates disposable private runtime paths
+                    |-- launches and reaps the complete Codex process group
+                    v
+              auditbase-agent / codex-exec
+                    |
+                    v
+              OpenAI model service
 
-### Local development and testing
+trusted scoring lane (never visible to agent):
+benchmark packager --> blinded source package --> run --> human adjudication
+                                                       --> deterministic evaluator
+```
 
-Use the developer's existing ChatGPT subscription authentication. This is the path already proven by the headless smoke test. Do not add API-key configuration merely for local testing.
+The browser never receives a model identifier or model credential and never
+calls Codex or OpenAI directly. Temporal history contains references and small
+control metadata, not uploaded source, prompts, findings, model configuration,
+credentials, or raw agent output.
 
-### Production website
+## Product scope and contract
 
-Use OpenAI API authentication owned by the backend. The browser submits only an approved audit tier; the backend-only configuration maps that tier to its OpenAI model and reasoning effort. Only the trusted backend model gateway supplies the API credential. Do not use a developer ChatGPT subscription for production jobs or expose model identifiers to the browser.
+The current wire contract uses `auditbase.*.v1` schema identifiers. It accepts
+one or many regular source files, including zero-byte files, and preserves their
+validated relative paths. File extensions and implementation languages are not
+allowlisted. Source-level review continues when a project cannot compile, with
+the compilation state and limitations represented explicitly.
 
-No production API key has been configured yet. That work belongs to the future control-plane and model-gateway step.
+The initial scope is intentionally narrow:
 
-## Approved V3 product contract decisions
+- Source-file uploads only; no paste, GitHub, explorer, ZIP, or archive input.
+- Backend-owned OpenAI model and reasoning-effort selection by tier.
+- Optional user guidance, treated as untrusted data rather than instructions
+  that can override the audit policy.
+- Canonical states: `queued`, `preparing`, `auditing`, `finalizing`,
+  `completed`, and `failed`.
+- Structured findings, coverage, compilation evidence, limitations, usage, and
+  typed failure details.
+- Failed partial results only when a bounded, contract-valid result was actually
+  retained. A failure with no valid result does not invent one.
 
-These decisions were confirmed after a read-only inspection of the existing website, API, database, Temporal workflow, Redis event stream, worker lifecycle, and report UI in `/Users/Nabeel/Desktop/auditbase/company/auditbase-github`.
+Public objects reject unknown fields. Paths reject absolute paths, traversal,
+backslashes, empty components, collisions after normalization, and other
+ambiguous forms. File count, upload bytes, request bytes, guidance, events,
+logs, diagnostics, evidence, snippets, and results are bounded by the reviewed
+backend configuration and semantic validators.
 
-### Existing platform integration
+Rust is the canonical public-contract source. Committed schemas live in
+`codex-rs/auditbase-contract/schema`, and executable examples live in
+`codex-rs/auditbase-contract/examples`. The website consumes a commit- and
+hash-locked copy; generated website files are never edited by hand.
 
-- Keep the existing website authentication, PostgreSQL persistence, credits, Temporal orchestration, Redis Streams, and report UI where they remain suitable.
-- Replace the existing audit engine with the V3 `auditbase-agent`; do not copy the V2 audit engine into V3.
-- Use authenticated Server-Sent Events (SSE) for one-way real-time audit progress, logs, findings, and completion updates.
-- Use ordinary authenticated HTTP endpoints for job creation and future control actions such as cancellation or additional guidance.
+## Backend configuration
 
-### Upload and source policy
+The single TOML file has this shape:
 
-- Support file upload as the only initial ingestion channel. Paste, explorer, and GitHub ingestion are deferred.
-- Support individual and multiple file uploads.
-- Preserve each file's normalized relative path; never flatten an upload to its basename.
-- Apply no extension allowlist: accept every bounded regular file byte-for-byte, including binary or unfamiliar formats. Unsupported/unreviewed files must produce an explicit limitation.
-- Keep ingestion, execution, schemas, and reporting language-agnostic. Market audit quality for a language/ecosystem only after its own blinded benchmark gate passes; EVM is the first measurement lane.
-- Treat uploaded files, filenames, repository instructions, build scripts, and commands as untrusted input.
-- The upload contract must carry normalized relative paths. Special files are rejected. Browser folder selection and ZIP/archive expansion remain undecided and must not be implemented without approval.
-- Until folder selection is approved, the website supports individual or multiple root-level files. The manifest remains nested-path capable and must preserve any relative path supplied by a future folder-aware client.
+```toml
+schema_version = "auditbase.audit-config.v1"
 
-### Tier and model policy
+[tiers.<public-tier-id>]
+enabled = true
+model = "<reviewed OpenAI model identifier>"
+reasoning_effort = "high" # low, medium, or high
+audit_timeout_minutes = 480
 
-- Keep product audit tiers.
-- The frontend sends only the selected tier identifier and must contain no real model identifiers or model aliases that disclose the underlying model.
-- Each tier has a separate backend-only model and reasoning-effort configuration.
-- Use the versioned `config/auditbase-v3.toml` backend configuration with logically separate `tiers` and `runtime` sections. Validate all enabled tiers at startup and fail closed; store the private config hash and effective model provenance per job. Secrets stay outside the file. Initial changes roll out through reviewed restarts, not hot reload.
-- A missing, disabled, or invalid tier/model configuration fails job creation with a clear error; the backend must not silently select another model.
-- Local ChatGPT subscription testing and production OpenAI API model availability are separate capabilities. The 2026-07-16 test confirmed that an API-candidate model may be unavailable through ChatGPT authentication.
+[runtime]
+# concurrency, upload, worker resource, retention, and network limits
 
-### Execution and failure policy
+[runtime.contract_limits]
+# request, guidance, event, result, diagnostic, snippet, and evidence limits
+```
 
-- The trusted agent and commands executed in the isolated uploaded-code environment may access broad public internet only through controlled egress that blocks internal, metadata, loopback, private, and control-plane destinations.
-- Internet access does not grant uploaded code access to the OpenAI API key, database credentials, Redis credentials, cloud credentials, other audits, or host files.
-- Broad public egress cannot guarantee confidentiality of the current audit's own source; offer a future restricted-egress mode for that requirement.
-- A compilation or dependency-resolution failure is nonfatal when Codex can continue a source-level audit. Record the failure as an explicit limitation and continue.
-- If the agent crashes, is cancelled by infrastructure, or exceeds its audit time limit, preserve any findings and events already produced, mark them as partial and incomplete, and mark the overall audit as `failed`.
-- A failed audit with partial results must never be presented as a completed audit.
+Use `codex-rs/auditbase-contract/examples/audit-config.v1.toml` as the
+canonical structural example. A deployable copy must live outside browser
+bundles and must contain no secret. Every website, outbox, and worker process
+loads the same absolute bytes and is configured with their exact lowercase
+SHA-256 digest. A missing, disabled, or unknown tier fails clearly; there is no
+model fallback.
 
-### Findings and reports
+The tier name is public. The model, reasoning effort, provider details, service
+tier, config content, and credentials are private operator data. `thread.started`
+proves what Codex was configured to request; it does **not** prove the model
+that a remote service actually served. Only a trusted gateway attestation can
+establish server-effective provenance.
 
-- Store a versioned structured JSON result as the system of record.
-- Retain findings with explicit review statuses instead of discarding everything except confirmed findings.
-- Retain normalized, versioned, bounded AuditBase events, coverage, reviewed files/functions, limitations, compilation status, and incomplete work. Raw Codex JSONL/reasoning remains private and bounded.
-- Continue supporting frontend-derived PDF, JSON, Markdown, and HTML report exports.
+## Runner and agent behavior
+
+`auditbase-v3-runner` is a zero-argument production boundary. It reads one
+bounded `auditbase.runner.v1` request from standard input and writes bounded
+normalized JSONL to standard output. Raw prompts, tool calls, command output,
+reasoning, and raw Codex JSONL stay private.
+
+Before accepting a result, the trusted-local implementation verifies the
+reviewed config digest, request and workspace descriptors, every uploaded file
+digest, selected tier, configured Codex runtime, output schema, result
+semantics, request/result coverage, and artifact digests. It writes artifacts
+atomically into private paths. Successful replay is accepted only after the
+cached inputs and provenance bindings are revalidated.
+
+The Codex child is launched with explicit model and reasoning settings,
+ephemeral state, strict config, no user config, no project instructions, no
+skills, no MCP servers, approval disabled, a controlled workspace, a scrubbed
+environment, and an explicit network policy. This narrows prompt-injection and
+ambient-configuration risk; it is not a substitute for a separate-kernel
+production sandbox.
+
+Timeout, cancellation, pipe failure, and normal completion all trigger process
+group cleanup. The Python supervisor and Rust runner exchange a private agent
+process-group handoff so the supervisor can reap both layers. Do not weaken or
+remove this protocol when changing process launch code.
+
+Trusted-local completion writes
+`control/local-run-provenance.v1.json`. It binds the requested and
+Codex-configured runtime plus agent, config, request, prompt, output-schema, and
+result digests. It is explicitly marked
+`trusted_local_only_not_benchmark_or_production` with gateway attestation
+`unavailable`; it must remain private and must never be represented as
+server-effective provenance.
+
+## Trusted-local test lane
+
+The real local lane exists to exercise the complete Codex path with an authored
+synthetic fixture and local subscription authentication. It is not authorized
+for customer source, third-party repositories, bounty targets, or any other
+untrusted input. Same-user processes and host-readable credentials are outside
+its isolation guarantees.
+
+Build the product binaries:
+
+```bash
+cd /absolute/path/to/auditbase-v3/codex-rs
+cargo build -p codex-auditbase-agent -p codex-auditbase-runner
+```
+
+The website repository owns the smoke harness. From that repository:
+
+```bash
+AUDITBASE_V3_RUNNER=/absolute/path/to/auditbase-v3/codex-rs/target/debug/auditbase-v3-runner \
+AUDITBASE_V3_AGENT_PATH=/absolute/path/to/auditbase-v3/codex-rs/target/debug/auditbase-agent \
+AUDITBASE_V3_SMOKE_MODEL=<explicit-supported-openai-model> \
+npm run smoke:v3-local
+```
+
+`AUDITBASE_V3_SMOKE_AUTH_FILE` may point to a mode-`0600` subscription auth JSON
+file; otherwise the harness uses `~/.codex/auth.json`. An optional absolute
+`AUDITBASE_V3_SMOKE_ROOT` retains the run under a chosen private directory. The
+harness copies auth into a fresh `CODEX_HOME`, audits only the committed
+synthetic fixture, validates the result and digest, removes the copied auth and
+runtime home, requires at least one material finding in that intentionally
+vulnerable fixture, and reports the retained private storage path. This is a
+functional sanity check, not an accuracy or recall benchmark.
+
+The standalone runner deliberately returns
+`isolation_and_gateway_attestation_required` outside its exact trusted-local
+mode. Do not bypass that failure for deployment.
+
+## Build and verification
+
+Run formatting, unit/integration tests, and strict AuditBase-owned lint from
+`codex-rs`:
+
+```bash
+cargo fmt --all -- --check
+cargo test -p codex-auditbase-contract
+cargo test -p codex-auditbase-runner --all-features
+cargo test -p codex-auditbase-evaluator
+cargo test -p codex-auditbase-benchmark
+cargo test -p codex-auditbase-agent
+cargo test -p codex-core-skills
+
+cargo clippy -p codex-auditbase-contract --all-targets --no-deps -- -D warnings
+cargo clippy -p codex-auditbase-runner --all-targets --all-features --no-deps -- -D warnings
+cargo clippy -p codex-auditbase-evaluator --all-targets --no-deps -- -D warnings
+cargo clippy -p codex-auditbase-benchmark --all-targets --no-deps -- -D warnings
+cargo clippy -p codex-auditbase-agent --all-targets --no-deps -- -D warnings
+
+cargo test -p codex-exec --test event_processor_with_json_output
+cargo test -p codex-config
+
+cargo tree -p codex-auditbase-agent --edges normal | rg 'codex-tui|ratatui'
+```
+
+The final command must produce no matches. Also run the focused upstream
+`codex-exec` JSONL tests because the AuditBase adapter depends on that boundary.
+When using Bazel on macOS, raise the file-descriptor limit before testing the
+AuditBase targets:
+
+```bash
+ulimit -n 4096
+bazel test --jobs=2 \
+  //codex-rs/auditbase-contract/... \
+  //codex-rs/auditbase-runner/... \
+  //codex-rs/auditbase-evaluator/... \
+  //codex-rs/auditbase-benchmark/... \
+  //codex-rs/auditbase-agent/...
+```
+
+Unit tests and a successful synthetic smoke establish implementation behavior,
+not production security or audit accuracy.
+
+## Quality measurement boundary
+
+The audit agent, benchmark source packager, and evaluator are separate trust
+domains. `auditbase-benchmark` packages only reviewer-cleared, allowlisted
+source into a blinded opaque run directory. It rejects incomplete license or
+contamination review, visible case identity, reports/truth artifacts, Git
+metadata, archives, traversal, symlinks, hardlinks, special files, answer
+markers, unexpected files, and digest/limit mismatches. It never downloads,
+compiles, executes, calls a model, or scores the source.
+
+```bash
+auditbase-benchmark package \
+  --catalog evaluator/catalog.json \
+  --source prepared/source-tree \
+  --output agent-input/opaque-run-id \
+  --opaque-run-case-id run-0123456789abcdef0123456789abcdef
+
+auditbase-benchmark verify \
+  --catalog evaluator/catalog.json \
+  --package agent-input/opaque-run-id \
+  --opaque-run-case-id run-0123456789abcdef0123456789abcdef
+```
+
+The trusted evaluator uses two blinded human reviewers for semantic matches; a
+disagreement requires a third reviewer and unresolved three-way disagreement
+requires a recorded panel decision. There is no LLM judge. Critical, High, and
+Medium truth items have weights 4, 3, and 2, and the frozen vulnerable-run
+metric is exact-rational weighted F2:
+
+```text
+5 * TP_weight / (5 * TP_weight + 4 * FN_weight + FP_weight)
+```
+
+Runs are averaged within each project, then projects receive equal macro
+weight. Clean controls report false-positive behavior separately. Invalid
+output scores zero and remains in the completion denominator. This machinery
+defines how future evidence is measured; synthetic evaluator fixtures are not
+evidence that V3 is accurate.
+
+## Contract export and website synchronization
+
+Regenerate schemas in place and review the diff before committing contract
+artifacts:
+
+```bash
+cd /absolute/path/to/auditbase-v3/codex-rs
+cargo run -p codex-auditbase-contract --bin auditbase-export-schemas -- \
+  auditbase-contract/schema
+cargo test -p codex-auditbase-contract
+```
+
+After the canonical Rust repository is clean and committed, synchronize the
+website atomically:
+
+```bash
+cd /absolute/path/to/auditbase-github
+AUDITBASE_V3_EXPECTED_COMMIT=$(git -C /absolute/path/to/auditbase-v3 rev-parse HEAD) \
+  npm run contract:v3:sync -- /absolute/path/to/auditbase-v3
+```
+
+The sync script refuses a dirty source repository, copies only the public
+schemas and examples, generates TypeScript, rejects private model/config fields,
+and writes `src/contracts/auditbase-v3/contract-lock.json` with the exact source
+commit and file hashes. Commit the Rust contract first and the website lock
+second. Never hand-edit generated schemas or TypeScript.
 
 ## Upstream Codex update policy
 
-OpenAI Codex is an actively changing dependency. AuditBase must distinguish between the latest available Codex commit and the latest AuditBase-verified Codex commit.
-
-```text
-upstream/main (latest available)
-        |
-        v
-isolated sync branch
-        |
-        v
-compatibility and quality gates
-        |
-        v
-auditbase-v3 (latest verified)
-        |
-        v
-pinned immutable production build
-```
-
-Rules:
-
-1. Keep `upstream` fetch-only and never push to the official OpenAI repository.
-2. Fetch upstream changes regularly and before every major AuditBase development step or release.
-3. Create a temporary branch named `sync/codex-<date>-<short-sha>` from the current verified AuditBase branch.
-4. Merge `upstream/main` into the temporary branch. Do not update the verified branch or production directly.
-5. Require the following gates before promotion:
-   - `auditbase-agent` Cargo build.
-   - Relevant package and Codex executor tests.
-   - TUI-free product dependency check.
-   - Local subscription-authenticated repository-tool smoke test.
-   - Audit job schema and website compatibility tests once those interfaces exist.
-   - Held-out smart-contract audit benchmark once the safe benchmark lane and private holdout exist.
-6. Record the upstream commit, AuditBase commit, model, configuration, worker image, test results, and benchmark results for every promoted version.
-7. Promote the sync branch through a reviewed merge only when all available gates pass.
-8. Keep the previous immutable production artifact available for immediate rollback.
-9. If an upstream change compiles but reduces audit precision, recall, reliability, isolation, or schema compatibility, keep the current verified version and investigate the update separately.
-
-Automation should eventually check `upstream/main` daily and open an update pull request, but it must never deploy an upstream change automatically.
-
-Current upstream comparison, verified on 2026-07-14:
-
-```text
-Initial Codex baseline:            c39520f3d1522f2587694b52eba7d3eb39460137
-Verified upstream Codex commit:    b24aa20107f365a1d0f06de9e0b28df5c516c7dd
-AuditBase synchronization commit:  75b0e690fd562c0d2d5d6407132aa45518185d69
-Difference at synchronization:     0 upstream commits
-```
-
-AuditBase contains the latest upstream commit available at the time of this synchronization. Future upstream commits must pass the same promotion process.
-
-Current fetched comparison, verified on 2026-07-16:
-
-```text
-Verified product-code ancestor:     b12e2448b053c1325794a52b94eb420f627d70b8
-Latest fetched upstream/main:       315195492c80fdade38e917c18f9584efd599304
-AuditBase-only commits incl. docs:  11
-Upstream commits not yet promoted:  106
-```
-
-No 2026-07-16 upstream commit was merged. Production and development remain on
-the verified AuditBase head until a temporary sync branch passes the full gate
-set. The only configured remote is the official fetch-only upstream; its push
-URL is disabled and no user-owned GitHub remote exists yet.
-
-## Current status
-
-### Completed: research and architecture decision record
-
-Status: COMPLETE (documentation and verification only; no product code)
-
-The 2026-07-16 research pass inspected the V3 fork and website, refreshed
-official Codex/OpenAI guidance, designed the isolation boundary and versioned
-backend configuration, selected the `codex exec` JSONL plus final-schema process
-boundary, defined a contamination-aware benchmark/scoring protocol, added
-transactional-outbox delivery, and reordered the roadmap so hostile benchmark
-repositories never execute on the developer host. The full record is in
-`AUDITBASE_V3_RESEARCH_PLAN.md`.
-
-### Completed: clean Codex baseline
-
-1. Created a completely separate repository at:
-
-   ```text
-   /Users/Nabeel/Desktop/auditbase-v3
-   ```
-
-2. Cloned the complete history of the official OpenAI Codex repository.
-
-3. Configured the OpenAI repository as a fetch-only upstream:
-
-   ```text
-   upstream fetch: https://github.com/openai/codex.git
-   upstream push:  DISABLED
-   ```
-
-4. Created the local development branch:
-
-   ```text
-   auditbase-v3
-   ```
-
-5. Pinned the initial baseline:
-
-   ```text
-   commit: c39520f3d1522f2587694b52eba7d3eb39460137
-   date:   2026-07-14
-   title:  Timestamp app-server notifications at emission (#32905)
-   ```
-
-6. Built only the standalone headless executor:
-
-   ```text
-   /Users/Nabeel/Desktop/auditbase-v3/codex-rs/target/debug/codex-exec
-   ```
-
-   Verified properties:
-
-   - Native Apple Silicon Mach-O executable.
-   - Debug smoke-test build.
-   - No TUI executable was produced.
-   - Git remained clean after the build.
-
-7. Ran a real authenticated, read-only agent smoke test using the compiled fork.
-
-   The agent used repository tools to inspect `codex-rs/exec/Cargo.toml`, found the package and binary declarations, and returned:
-
-   ```text
-   AUDITBASE_V3_CODEX_OK package=codex-exec binary=codex-exec
-   ```
-
-   Smoke-test thread:
-
-   ```text
-   019f5e1e-eb94-7842-a0cf-4d8060c42038
-   ```
-
-8. Verified the compiled binary checksum:
-
-   ```text
-   SHA-256: e8292eaf73496ed732b404c9c2c5a3115e10875eab07f0c481bd488a38abb1f4
-   ```
-
-9. Confirmed that both AuditBase V2 repositories remained untouched.
-
-### Completed: AuditBase headless product binary
-
-Implementation commit:
-
-```text
-0c4f0443e6fac12817ffccf6b92a27b4daf91915
-```
-
-1. Added a dedicated Rust package and binary:
-
-   ```text
-   package: codex-auditbase-agent
-   binary:  auditbase-agent
-   path:    /Users/Nabeel/Desktop/auditbase-v3/codex-rs/target/debug/auditbase-agent
-   ```
-
-2. Kept the new binary as a thin headless product boundary over the upstream `codex-exec` library. The Codex agent loop, repository tools, sandbox, sessions, OpenAI model support, and structured-output behavior remain in the maintained upstream runtime instead of being copied.
-
-3. Verified the product identity:
-
-   ```text
-   auditbase-agent 0.0.0
-   ```
-
-4. Inspected the complete normal Cargo dependency graph and confirmed that neither `codex-tui` nor `ratatui` is present.
-
-5. Added and ran a focused regression test for forwarding prompts and root configuration overrides into `codex-exec`:
-
-   ```text
-   just test -p codex-auditbase-agent
-   1 test run: 1 passed, 0 skipped
-   ```
-
-6. Ran the required scoped Clippy fix pass and repository formatter successfully:
-
-   ```text
-   just fix -p codex-auditbase-agent
-   just fmt
-   ```
-
-7. Ran a real authenticated, read-only smoke test through `auditbase-agent`. The agent used repository tools to inspect its own package and entry point, then returned exactly:
-
-   ```text
-   AUDITBASE_V3_AGENT_OK package=codex-auditbase-agent binary=auditbase-agent runtime=codex-exec
-   ```
-
-   Smoke-test thread:
-
-   ```text
-   019f5e8c-76bb-71d3-8d40-f1465621a054
-   ```
-
-8. Verified the compiled debug binary checksum:
-
-   ```text
-   SHA-256: 5f25f26a7db84b9c1fe3b8a5eb25d3ab2910648a3ce1b48cfe8f4fcc524eb98e
-   ```
-
-9. Imported no AuditBase V2 code, prompts, schemas, or orchestration.
-
-### Completed: first upstream synchronization rehearsal
-
-Synchronization commit:
-
-```text
-75b0e690fd562c0d2d5d6407132aa45518185d69
-```
-
-1. Tagged the previous verified AuditBase state for rollback:
-
-   ```text
-   tag:    auditbase-v3-step1-verified
-   commit: c303fd0b876740d41489a2863690282733cc6db9
-   ```
-
-2. Created `sync/codex-20260714-b24aa20107` from the verified AuditBase branch and merged four upstream commits without conflicts.
-
-3. Reviewed the upstream delta: 41 files changed, primarily covering injectable model managers, app-server environment status, and SQLite thread-history projection. No file in `codex-rs/auditbase-agent` changed.
-
-4. Built the synchronized product successfully:
-
-   ```text
-   cargo build -p codex-auditbase-agent
-   ```
-
-5. Ran the available focused and executor compatibility tests:
-
-   ```text
-   just test -p codex-auditbase-agent
-   1 test run: 1 passed, 0 skipped
-
-   just test -p codex-exec
-   129 tests run: 129 passed, 0 skipped
-   ```
-
-6. Verified the product identity and dependency boundary:
-
-   ```text
-   auditbase-agent 0.0.0
-   TUI_DEPENDENCY_ABSENT
-   ```
-
-7. Ran a real subscription-authenticated, read-only repository-tool smoke test. The running agent verified its own package, runtime delegation, and synchronized upstream ancestry, then returned exactly:
-
-   ```text
-   AUDITBASE_V3_SYNC_OK upstream=b24aa20107 binary=auditbase-agent runtime=codex-exec
-   ```
-
-   Smoke-test thread:
-
-   ```text
-   019f5ea5-467f-7cd0-bf09-0dbd68c95852
-   ```
-
-8. Ran `just fmt` successfully with no resulting source changes.
-
-9. Promoted the exact tested synchronization commit to `auditbase-v3` with a fast-forward, preserving the tested commit identity.
-
-10. Verified the synchronized debug binary checksum:
-
-    ```text
-    SHA-256: 5be46494448c0c6517b780606f0d5a958f6ba216ce00ef62dc804b386524b0cd
-    ```
-
-### Completed: versioned V3 audit contract
-
-Implementation commit:
-
-```text
-b78549197f0cba8d512ff91da55150146484cfe3
-```
-
-1. Added an independent Rust contract package:
-
-   ```text
-   package: codex-auditbase-contract
-   path:    /Users/Nabeel/Desktop/auditbase-v3/codex-rs/auditbase-contract
-   ```
-
-2. Defined seven versioned schemas generated from Rust types:
-
-   - Audit creation request.
-   - Accepted-job response.
-   - Audit snapshot.
-   - API error.
-   - SSE audit event.
-   - Terminal audit result.
-   - Backend-only audit configuration.
-
-3. Defined multipart upload correlation through stable file IDs and normalized relative paths. The contract never relies on multipart ordering or sanitized browser filenames.
-
-4. Defined the canonical lifecycle:
-
-   ```text
-   queued -> preparing -> auditing -> finalizing -> completed
-      |          |           |            |
-      +----------+-----------+------------+-> failed
-   ```
-
-5. Defined compilation failure as a recorded limitation that does not stop source-level analysis, and defined agent crash, cancellation, infrastructure failure, invalid output, model unavailability, and audit timeout as terminal failures.
-
-6. Defined partial-result preservation: a failed audit retains available findings, coverage, events, diagnostics, and usage while remaining visibly failed and incomplete.
-
-7. Defined authenticated SSE event envelopes, replay sequence behavior, terminal events, and result retrieval without exposing internal Codex JSONL or backend model identifiers to the browser.
-
-8. Added representative request, response, configuration, event, completed-result, and failed-partial-result examples plus a complete existing-website compatibility map.
-
-9. Added semantic validation for path traversal, duplicate paths and IDs, checksums, lifecycle transitions, finding evidence, coverage counts, severity counts, result/failure invariants, configuration, and public model secrecy.
-
-10. Generated and committed all JSON Schema fixtures, then verified they exactly match the Rust source of truth.
-
-11. Ran the focused Cargo contract suite successfully:
-
-    ```text
-    just test -p codex-auditbase-contract
-    8 tests run: 8 passed, 0 skipped
-    ```
-
-12. Ran the Bazel integration target successfully after declaring the examples and schemas as compile-time test data:
-
-    ```text
-    bazel test //codex-rs/auditbase-contract:auditbase-contract-contract_examples-test
-    1 test target: passed
-    ```
-
-13. Ran the required scoped Clippy fix, repository formatter, Bazel lock update, and Bazel lock verification successfully.
-
-14. Added no smart-contract audit prompt, skill, V2 code, website mutation, worker execution logic, or production credential.
-
-### Important current limitations
-
-- The upstream `codex-exec` runtime implementation remains unmodified; V3 currently adds the isolated `codex-auditbase-agent` wrapper and independent `codex-auditbase-contract` package.
-- The upstream TUI source still exists in the fork for mergeability, but the `auditbase-agent` dependency graph does not include it.
-- The current `auditbase-agent` binary is a debug build, not a production release build.
-- There is no smart-contract-specific audit mode yet.
-- The V3 contract and findings/result schemas exist, but the existing website API, Temporal workflow, Redis stream adapter, report page, and `auditbase-agent` do not implement them yet.
-- There is no isolated worker image, production model gateway, or website integration yet.
-- Production OpenAI API authentication is not configured yet; the current smoke test uses subscription authentication as intended for development and testing.
-- No multi-provider abstraction is planned for the initial V3.
-- No skills or V2 components have been added.
-- The latest fetched Codex upstream is 106 commits ahead. It is deliberately not merged because it has not passed the AuditBase sync and benchmark gates.
-- The current fork still has no user-owned GitHub push remote, so commits remain local until that remote is configured intentionally.
-- The V3 contract passes both Cargo and Bazel tests. The separate `auditbase-agent` Bazel path still reaches a pre-existing pinned-upstream mismatch: `exec-server/BUILD.bazel` passes `unit_test_args` to a `codex_rust_crate` macro that does not accept it. Cargo remains the verified product-agent build path until that unrelated upstream baseline issue is resolved.
-- Audit-quality regression testing is not yet available because the safe benchmark lane and private holdout do not exist. Future upstream promotions must add that gate once they exist.
-- Exact effective model identity is not emitted in the current JSONL smoke stream. Production provenance recording remains a release-gate requirement.
-- Strict Clippy across all transitive dependencies currently stops on an upstream `large_enum_variant` warning in `core-plugins/src/manifest.rs`; strict `--no-deps` Clippy passes both AuditBase crates.
-
-## Current smoke test
-
-Run from Terminal:
-
-```bash
-cd /Users/Nabeel/Desktop/auditbase-v3
-
-./codex-rs/target/debug/auditbase-agent \
-  --ephemeral \
-  --ignore-user-config \
-  --ignore-rules \
-  --json \
-  --sandbox read-only \
-  -c project_doc_max_bytes=0 \
-  --cd "$PWD" \
-  "Inspect the AuditBase agent package, entry point, current Git HEAD, verified upstream ancestry, and current upstream/main using read-only tools. If they match the recorded values, reply exactly: AUDITBASE_V3_HEALTH_OK head=b12e2448 upstream_verified=b24aa20107 current_upstream=315195492 runtime=codex-exec"
-```
-
-The 2026-07-16 run succeeded as thread
-`019f6ce8-bbfe-7a42-9f7d-329418dbcfdc` with the exact health result above. It
-used Codex's ChatGPT-subscription-supported default model. A preceding explicit
-`gpt-5.6` attempt failed clearly because that model was not supported through
-ChatGPT authentication; production API models must be validated separately.
-
-This is a headless process. It accepts a task, performs the work, prints JSONL
-events and the result, and exits. It does not open a terminal UI.
-
-## Target system
-
-```text
-Existing website frontend
-        |
-        v
-Existing authenticated Next.js API
-        |-- PostgreSQL audit state, result, and transactional outbox
-        |       `-- idempotent publisher --> Redis Streams --> SSE --> website
-        |
-        `-- Temporal V3 workflow --> trusted provisioner
-                                      |
-                                      v
-                            Fresh separate-kernel microVM
-                                      |
-                                      v
-                       auditbase-agent (headless Codex fork)
-                                      |
-                                      v
-                         Trusted OpenAI API gateway
-                                      |
-                                      v
-                            OpenAI API (production)
-                                      |
-                                      v
-                    Validated findings, events, and report
-```
-
-The website control plane must never execute uploaded code. Audit workers must never receive permanent infrastructure credentials or the production OpenAI API key. Local development may use the developer's existing subscription authentication; production must use the backend-owned OpenAI API path shown above. Existing website infrastructure is retained only where it satisfies the V3 contract and isolation requirements.
-
-## Step-by-step roadmap
-
-Only one step should be active at a time. A step is complete only when its acceptance checks pass and the evidence is recorded in this document.
-
-### Step 0: Establish a working Codex baseline
-
-Status: COMPLETE
-
-Evidence: source clone, pinned commit, clean branch, successful headless build, real model connection, repository tool execution, and exact smoke-test result recorded above.
-
-### Step 1: Create the AuditBase headless product binary
-
-Status: COMPLETE
-
-Evidence: implementation commit `0c4f0443e6fac12817ffccf6b92a27b4daf91915`, successful Cargo build, successful version command, TUI-free dependency graph, passing focused package test, successful lint and format passes, and exact real-model smoke-test output recorded above.
-
-Work:
-
-- Create an `auditbase-agent` binary based on the working headless executor.
-- Keep the Codex agent loop, repository navigation, tools, sandbox, sessions, OpenAI model support, and structured-output support.
-- Remove the TUI and interactive Codex surfaces from the AuditBase product build.
-- Keep the untouched upstream history and fetch remote so future Codex changes remain mergeable.
-- Preserve the raw Codex behavior before introducing smart-contract instructions.
-- Preserve the existing subscription-authentication path for local development and testing.
-
-Acceptance checks:
-
-- `auditbase-agent --version` runs successfully.
-- The product dependency graph does not include `codex-tui`.
-- The original headless smoke test passes through `auditbase-agent`.
-- No AuditBase V2 code is present.
-- Relevant tests pass and the Git diff is reviewed before committing.
-
-### Step 1.5: Establish and rehearse upstream synchronization
-
-Status: COMPLETE
-
-Evidence: rollback tag `auditbase-v3-step1-verified`, verified upstream commit `b24aa20107f365a1d0f06de9e0b28df5c516c7dd`, synchronization commit `75b0e690fd562c0d2d5d6407132aa45518185d69`, conflict-free merge, successful Cargo build, 1 passing AuditBase package test, 129 passing `codex-exec` tests, TUI-free dependency graph, exact real-model smoke output, and clean formatting result recorded above.
-
-Work:
-
-- Create an isolated sync branch from the verified AuditBase V3 branch.
-- Merge the current four upstream Codex commits into that branch.
-- Review upstream changes and conflicts before modifying AuditBase-owned code.
-- Build and test `auditbase-agent` through the available compatibility gates.
-- Run the real subscription-authenticated repository-tool smoke test.
-- Confirm that the TUI remains absent from the product dependency graph.
-- Merge the verified sync result into `auditbase-v3` and record both commit identities.
-- Define the repeatable commands that future automation will execute.
-
-Acceptance checks:
-
-- The verified AuditBase branch contains the reviewed current upstream commit.
-- `auditbase-agent` builds and its focused tests pass.
-- The real-model smoke test passes with repository tool execution.
-- No AuditBase V2 code is introduced.
-- The product dependency graph remains TUI-free.
-- The previous verified commit remains available as a rollback point.
-- The canonical README records the upstream SHA, resulting AuditBase SHA, commands, tests, and limitations.
-
-### Step 2: Define the first smart-contract audit contract
-
-Status: COMPLETE
-
-Evidence: implementation commit `b78549197f0cba8d512ff91da55150146484cfe3`, seven generated schemas, eight validated examples/event sequences, 8 passing Cargo tests, one passing Bazel integration target, clean scoped Clippy, clean formatting, and successful Bazel lock verification recorded above.
-
-Define new V3 inputs and outputs without copying V2 schemas.
-
-Initial input:
-
-- Versioned audit request.
-- Selected tier identifier; no browser-supplied model.
-- One or more uploaded regular files with normalized, preserved relative paths and byte hashes.
-- Optional user focus/guidance treated as untrusted audit context.
-- Backend-resolved tier, model, reasoning effort, and runtime configuration.
-
-Initial output:
-
-- Versioned structured findings JSON as the system of record.
-- Human-readable report.
-- Files and functions reviewed.
-- Finding review status and evidence.
-- Compilation/dependency status, limitations, partial-result status, and unfinished coverage.
-- Normalized, versioned, bounded AuditBase execution events and usage. Raw Codex JSONL and reasoning remain private.
-
-Contract behavior:
-
-- Compilation or dependency failure does not stop source-level analysis when Codex can continue.
-- Agent crash or time-limit failure preserves partial artifacts but leaves the overall audit failed.
-- The API and SSE event schema must use one canonical lifecycle vocabulary; website adapters must not invent competing statuses.
-- Uploaded files preserve relative paths. Browser folder selection and archive/ZIP support remain explicitly undecided.
-
-### Step 3: Create the safe benchmark lane and evaluator
-
-Status: NEXT -- NOT STARTED
-
-- Freeze the scoring specification and build offline evaluator fixtures first.
-- Build sanitized, hashed benchmark packages without exposing ground truth to the agent.
-- Implement immutable effective-model/config provenance, the JSONL-to-V3 adapter, bounded result accumulator, and final schema/semantic validator; pass their failure fixtures before a real repository runs.
-- Before any real benchmark source reaches the agent, provide one fresh separate-kernel guest per run, no host or permanent credentials, job-scoped model transport, no public web, bounded resources/output/time, and guaranteed teardown.
-- Prove that repository commands cannot access the model channel, host, other jobs, internal networks, or ground truth.
-- Do not execute hostile benchmark repositories on the developer host.
-
-### Step 4: Run the raw Codex EVM baseline
-
-Status: PENDING
-
-- Run sanitized Kelp only as a harness smoke case, then paired raw `codex exec` and skill-free `auditbase-agent` arms from the same pinned source/image.
-- Use identical model, reasoning, prompt, tools, scope, network, token, and time settings; the wrapper is the only parity treatment.
-- Expand into stratified EVMbench, precision-aware ScaBench cases, Blackhole coverage stress, temporal cases, and finally the private rotating holdout.
-- Record every run, invalid result, match decision, finding, miss, false positive, cost, and uncertainty interval.
-- Keep public web disabled only for anti-contamination benchmark runs; separately test the production controlled-public-egress mode during shadow/security qualification.
-- Do not add an audit skill until wrapper parity and the raw baseline are understood.
-
-### Step 5: Create the production isolated audit worker
-
-Status: PENDING
-
-- One fresh Firecracker/Kata-class microVM or equivalent separate-kernel guest per audit. Ordinary containers are local-development only.
-- Read-only immutable input plus a disposable writable build workspace.
-- No permanent secrets in the worker.
-- Broad public outbound access only through controlled egress that blocks loopback, metadata, private/VPC/cluster networks, redirects/rebinding, platform services, host files, and other audits.
-- Separate the trusted agent/model channel from repository-command UID, process, descriptor, environment, and network access.
-- CPU, memory, disk, and runtime limits.
-- Safe file-path validation, workspace materialization, and repository-instruction quarantine.
-
-### Step 6: Create the V3 control plane
-
-Status: PENDING
-
-- Add the separate authenticated `/api/v3/audits` lane for the versioned V3 contract.
-- Upload ingestion with preserved relative paths.
-- Reuse the existing database, Temporal workflow, and Redis Streams where compatibility and isolation checks pass.
-- Canonical status, cancellation, bounded SSE events, transactional outbox/reconciliation, and report retrieval.
-- Encrypted source and artifact storage where required by the production deployment.
-- Backend-only per-tier OpenAI model and reasoning-effort configuration.
-- Server-side OpenAI API credentials and short-lived worker authorization.
-
-### Step 7: Integrate the existing website
-
-Status: PENDING
-
-- Keep the website as the customer interface.
-- Replace the old audit-engine execution step with `auditbase-agent` through the new V3 API and worker contract.
-- Show upload validation, queued/running/completed/failed states, and the final report.
-- Preserve normalized relative file paths and remove the current `.sol`-only restriction.
-- Remove real model identifiers and model aliases from frontend code and responses.
-- Retain the existing authenticated SSE path after normalizing its event and status schemas.
-- Do not expose internal Codex protocols or provider secrets to the browser.
-
-### Step 8: Improve audit quality through measured additions
-
-Status: PENDING
-
-Possible additions, each evaluated independently:
-
-- Smart-contract audit skills.
-- Protocol threat modelling.
-- Coverage enforcement.
-- Independent candidate verification.
-- Reproducible PoCs and negative controls.
-- Parallel audit lanes.
-
-An addition remains only if it improves the held-out benchmark without unacceptable precision or reliability regressions.
-
-Add Move, Solana/Rust, Cairo, and other ecosystem lanes only with their own
-toolchain image, private cases, and release gates.
-
-### Step 9: Production hardening and release
-
-Status: PENDING
-
-- Optimized release build.
-- Complete relevant test suites.
-- Multi-tenant security review.
-- Load, cancellation, recovery, and failure testing.
-- Upstream update procedure.
-- Apache-2.0 license and modification notices.
-- Selected-customer rollout with monitoring.
-
-## Stop point
-
-Product implementation is currently stopped after Step 2. The research and
-architecture record is complete, but Step 3 coding must not begin until the user
-explicitly authorizes coding.
-
-When a step is completed, update this document with:
-
-- The exact commit.
-- Commands executed.
-- Tests and observed results.
-- Known limitations.
-- The newly approved next step.
+AuditBase tracks the latest **verified** Codex commit, not an automatically
+moving `main` branch.
+
+1. Keep `upstream` fetch-only and fetch it before major work and releases.
+2. Start `sync/codex-YYYYMMDD-<short-sha>` from the verified AuditBase branch.
+3. Merge the fetched upstream commit on that temporary branch.
+4. Review conflicts and the execution boundary: CLI flags, JSONL events,
+   configuration loading, model provenance, skills/project instructions, tool
+   sandboxing, environment inheritance, and child-process lifecycle.
+5. Run the Rust, Bazel, website contract/conformance, worker, and synthetic
+   trusted-local gates. Replay malformed, timeout, cancellation, retry, and
+   partial-result fixtures.
+6. Run the frozen benchmark/evaluator gate when a licensed private corpus is
+   available. Do not substitute a public, contamination-prone smoke fixture.
+7. Fast-forward the verified AuditBase branch only after every required gate
+   passes. Record the upstream SHA, AuditBase SHA, config/arm digest, runtime
+   image, and results.
+
+A large upstream change is a reason for deeper review, not a reason to pin V3
+forever or to merge without verification. AuditBase-owned changes should remain
+at narrow boundaries so future merges stay tractable.
+
+## Production fail-closed gates
+
+Opening V3 to hostile customer uploads requires all of the following; labels or
+environment acknowledgements alone do not satisfy them:
+
+- One disposable, separate-kernel microVM per audit and verified teardown.
+- Host-enforced public-only egress, including internal/metadata blocking,
+  redirect and DNS-rebinding defenses, and no cross-audit network path.
+- A keyless, job-scoped OpenAI gateway with quota enforcement and signed
+  server-effective model/runtime attestation. Model credentials must never enter
+  the guest.
+- Object-store workspace and artifact transport with streaming size limits,
+  immutable references, digest verification, and guest/host manifest agreement.
+- No database, Redis, Temporal, website worker token, cloud, or other customer
+  credential in the audit guest.
+- Deployed PostgreSQL terminal/outbox atomicity, idempotent Redis publication,
+  cancellation reconciliation, retention workers, backup/restore, and operator
+  alerts verified under failure injection.
+- A deliberate billing/credit policy integrated atomically with audit creation
+  and terminal handling. The trusted-local lane currently performs no charge.
+- Load, abuse, dependency, secret-leak, prompt-injection, and isolation testing,
+  followed by a limited shadow/canary rollout with rollback.
+- A licensed, private, blinded and rotating holdout corpus with human
+  adjudication before making any quality claim.
+
+Until these gates pass, the website public routes and worker remain restricted
+to explicit loopback synthetic testing and the runner remains fail closed for
+production mode.
+
+## Honest non-claims
+
+- V3 is not production ready for untrusted uploads.
+- The trusted-local lane is not a sandbox for hostile code.
+- V3 has not been shown to be the best auditor in the market, or to exceed any
+  competitor's precision, recall, severity accuracy, or weighted F2.
+- Public/synthetic fixtures test plumbing and can be present in model training
+  data; they are not independent accuracy evidence.
+- Language-agnostic ingestion means the agent can inspect arbitrary source
+  text. It does not promise that every compiler, build system, or chain-specific
+  verifier is installed.
+- Configured model provenance is not server-effective provenance.
+- The current product scope is OpenAI only; Anthropic support is not part of
+  this implementation.
+- Lifecycle/progress can be delivered in real time, but the current real runner
+  does not publish findings incrementally while the model is still auditing.
+
+These boundaries are deliberate. They let the team finish and verify one
+coherent foundation without representing unfinished infrastructure or
+unmeasured audit quality as complete.

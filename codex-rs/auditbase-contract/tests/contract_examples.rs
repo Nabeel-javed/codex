@@ -205,6 +205,23 @@ fn audit_config_schema_caps_results_at_the_runner_boundary() {
     );
 }
 
+#[test]
+fn audit_config_schema_exposes_only_the_approved_reasoning_efforts() {
+    let (_, schema) = generated_schemas()
+        .into_iter()
+        .find(|(filename, _)| *filename == "audit-config.v1.schema.json")
+        .expect("audit config schema should be generated");
+    let schema = serde_json::to_value(schema).expect("schema should serialize");
+    let efforts = schema["definitions"]["ReasoningEffort"]["enum"]
+        .as_array()
+        .expect("reasoning effort enum should be an array")
+        .iter()
+        .map(|value| value.as_str().expect("reasoning effort should be a string"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(efforts, vec!["low", "medium", "high", "xhigh"]);
+}
+
 fn validate_json<T>(payload: &str)
 where
     T: serde::de::DeserializeOwned + Validate,

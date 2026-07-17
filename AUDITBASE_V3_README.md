@@ -117,7 +117,7 @@ schema_version = "auditbase.audit-config.v1"
 [tiers.<public-tier-id>]
 enabled = true
 model = "<reviewed OpenAI model identifier>"
-reasoning_effort = "high" # low, medium, or high
+reasoning_effort = "high" # low, medium, high, or xhigh
 audit_timeout_minutes = 480
 
 [runtime]
@@ -133,6 +133,11 @@ bundles and must contain no secret. Every website, outbox, and worker process
 loads the same absolute bytes and is configured with their exact lowercase
 SHA-256 digest. A missing, disabled, or unknown tier fails clearly; there is no
 model fallback.
+
+The current local validation profile uses `xhigh` only for its `test` tier;
+`standard` and `deep` remain `high`. The contract intentionally rejects
+unapproved values such as `max` and `ultra` even if a particular upstream model
+advertises them.
 
 The tier name is public. The model, reasoning effort, provider details, service
 tier, config content, and credentials are private operator data. `thread.started`

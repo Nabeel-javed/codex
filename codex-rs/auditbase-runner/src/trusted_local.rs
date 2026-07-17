@@ -2294,6 +2294,7 @@ fn reasoning_effort(effort: ReasoningEffort) -> &'static str {
         ReasoningEffort::Low => "low",
         ReasoningEffort::Medium => "medium",
         ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh => "xhigh",
     }
 }
 
@@ -3355,6 +3356,40 @@ mod tests {
     }
 
     #[test]
+    fn xhigh_configured_runtime_is_accepted_exactly_and_detects_drift() {
+        let parsed = crate::raw_jsonl::parse_thread_events(
+            br#"{"type":"thread.started","thread_id":"thread-xhigh","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"xhigh","service_tier":null}"#,
+            JsonlLimits {
+                max_total_bytes: 1024 * 1024,
+                max_line_bytes: 64 * 1024,
+                max_events: 100,
+            },
+        )
+        .expect("xhigh thread metadata should parse");
+        let tier = TierConfig {
+            enabled: true,
+            model: "gpt-test".to_owned(),
+            reasoning_effort: ReasoningEffort::XHigh,
+            audit_timeout_minutes: 1,
+        };
+
+        let configured = super::verify_configured_runtime(&parsed.events, &tier)
+            .expect("exact xhigh runtime should validate");
+        assert_eq!(configured.reasoning_effort, "xhigh");
+
+        let drifted_tier = TierConfig {
+            reasoning_effort: ReasoningEffort::High,
+            ..tier
+        };
+        assert!(
+            super::verify_configured_runtime(&parsed.events, &drifted_tier)
+                .expect_err("xhigh/high drift must be rejected")
+                .to_string()
+                .contains("reasoning effort drifted")
+        );
+    }
+
+    #[test]
     fn agent_group_is_dead_and_jsonl_tail_is_drained_before_return() {
         let root = tempfile::tempdir().expect("tempdir");
         let workspace = root.path().join("workspace");
@@ -3415,7 +3450,7 @@ test -f "$workspace/src/example.sol"
 printf '%s\n' "$!" > "$HOME/background.pid"
 /bin/sleep 0.15
 /bin/cat "$HOME/model-output.fixture.json" > "$output"
-printf '%s\n' '{"type":"thread.started","thread_id":"thread-test","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"high","service_tier":null}'
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-test","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"xhigh","service_tier":null}'
 printf '%s\n' '{"type":"turn.started"}'
 printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":1}}'
 "#;
@@ -3450,7 +3485,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
         let tier = TierConfig {
             enabled: true,
             model: "gpt-test".to_owned(),
-            reasoning_effort: ReasoningEffort::High,
+            reasoning_effort: ReasoningEffort::XHigh,
             audit_timeout_minutes: 1,
         };
         let mut progress_calls = 0_u32;
@@ -3531,7 +3566,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
             "--strict-config".to_owned(),
             "--skip-git-repo-check".to_owned(),
             "--config".to_owned(),
-            "model_reasoning_effort=\"high\"".to_owned(),
+            "model_reasoning_effort=\"xhigh\"".to_owned(),
             "--config".to_owned(),
             "approval_policy=\"never\"".to_owned(),
             "--config".to_owned(),

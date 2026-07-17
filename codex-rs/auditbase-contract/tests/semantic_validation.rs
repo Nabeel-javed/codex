@@ -15,6 +15,7 @@ use codex_auditbase_contract::MAX_AUDIT_TIMEOUT_MINUTES;
 use codex_auditbase_contract::MAX_GUIDANCE_BYTES;
 use codex_auditbase_contract::MAX_REQUEST_BYTES;
 use codex_auditbase_contract::MAX_RESULT_BYTES;
+use codex_auditbase_contract::ReasoningEffort;
 use codex_auditbase_contract::Severity;
 use codex_auditbase_contract::Validate;
 use codex_auditbase_contract::ValidateWithLimits;
@@ -399,12 +400,32 @@ fn result_cap_matches_the_trusted_runner_output_boundary() {
 }
 
 #[test]
-fn tier_reasoning_effort_is_closed_to_the_publicly_approved_values() {
-    let invalid = CONFIG.replace(
-        "reasoning_effort = \"medium\"",
-        "reasoning_effort = \"xhigh\"",
+fn tier_reasoning_effort_accepts_exact_xhigh_and_rejects_unapproved_values() {
+    let parsed: AuditConfig = toml::from_str(CONFIG).expect("xhigh should parse");
+    assert_eq!(
+        parsed
+            .tiers
+            .get("test")
+            .expect("test tier")
+            .reasoning_effort,
+        ReasoningEffort::XHigh
     );
-    assert!(toml::from_str::<AuditConfig>(&invalid).is_err());
+    assert_eq!(
+        serde_json::to_string(&ReasoningEffort::XHigh).expect("xhigh should serialize"),
+        "\"xhigh\""
+    );
+
+    for unapproved in ["max", "ultra", "x_high"] {
+        let invalid = CONFIG.replacen(
+            "reasoning_effort = \"xhigh\"",
+            &format!("reasoning_effort = \"{unapproved}\""),
+            1,
+        );
+        assert!(
+            toml::from_str::<AuditConfig>(&invalid).is_err(),
+            "{unapproved} must remain outside the AuditBase V3 boundary"
+        );
+    }
 }
 
 #[test]

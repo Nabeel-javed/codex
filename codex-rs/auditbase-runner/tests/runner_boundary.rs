@@ -204,6 +204,27 @@ fn provenance_requires_all_three_runtime_layers_and_binds_artifacts() {
 }
 
 #[test]
+fn provenance_accepts_exact_xhigh_and_rejects_reasoning_effort_drift() {
+    let configured = CodexConfiguredRuntime {
+        provider_id: "openai".to_owned(),
+        model: "gpt-test".to_owned(),
+        reasoning_effort: "xhigh".to_owned(),
+        service_tier: None,
+    };
+    let provenance = provenance(configured).expect("xhigh provenance fixture should build");
+    provenance
+        .validate()
+        .expect("all three exact xhigh runtime layers should validate");
+
+    let mut drifted = provenance;
+    drifted.effective.reasoning_effort = "high".to_owned();
+    assert!(matches!(
+        drifted.validate(),
+        Err(RunnerError::RuntimeMismatch { .. })
+    ));
+}
+
+#[test]
 fn private_model_output_cannot_author_trusted_lifecycle_fields() {
     let context = model_context();
     let output = parse_model_audit_output(COMPLETED_OUTPUT, 1024 * 1024, &context)
@@ -716,6 +737,7 @@ fn trusted_usage() -> AuditUsage {
 }
 
 fn provenance(configured: CodexConfiguredRuntime) -> Result<PrivateRunProvenance, RunnerError> {
+    let reasoning_effort = configured.reasoning_effort.clone();
     let mut toolchain = BTreeMap::new();
     toolchain.insert("forge".to_owned(), "1.2.3".to_owned());
     let toolchain_sha256 = canonical_sha256(&toolchain)?;
@@ -725,7 +747,7 @@ fn provenance(configured: CodexConfiguredRuntime) -> Result<PrivateRunProvenance
         requested: RequestedRuntime {
             provider_id: "openai".to_owned(),
             model: "gpt-test".to_owned(),
-            reasoning_effort: "high".to_owned(),
+            reasoning_effort: reasoning_effort.clone(),
             service_tier: None,
             auth_class: AuthClass::ApiKey,
         },
@@ -734,7 +756,7 @@ fn provenance(configured: CodexConfiguredRuntime) -> Result<PrivateRunProvenance
             provider_id: "openai".to_owned(),
             model: "gpt-test".to_owned(),
             model_snapshot: "gpt-test-2026-07-17".to_owned(),
-            reasoning_effort: "high".to_owned(),
+            reasoning_effort,
             service_tier: None,
             auth_class: AuthClass::ApiKey,
         },

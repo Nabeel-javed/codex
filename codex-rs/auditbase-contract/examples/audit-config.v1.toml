@@ -3,7 +3,7 @@ schema_version = "auditbase.audit-config.v1"
 [tiers.test]
 enabled = true
 model = "backend-configured-test-model"
-reasoning_effort = "medium"
+reasoning_effort = "xhigh"
 audit_timeout_minutes = 30
 
 [tiers.fast]

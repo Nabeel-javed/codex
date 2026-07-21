@@ -76,18 +76,34 @@ pub fn parse_thread_events(bytes: &[u8], limits: JsonlLimits) -> Result<ParsedJs
                 line: line_number,
                 message: error.to_string(),
             })?;
-        validate_event_envelope(&value, line_number)?;
-        let event: ThreadEvent =
-            serde_json::from_value(value.clone()).map_err(|error| RunnerError::MalformedJsonl {
-                line: line_number,
-                message: error.to_string(),
-            })?;
+        let is_best_effort_item = is_item_event(&value);
+        if let Err(error) = validate_event_envelope(&value, line_number) {
+            if is_best_effort_item {
+                continue;
+            }
+            return Err(error);
+        }
+        let event: ThreadEvent = match serde_json::from_value(value.clone()) {
+            Ok(event) => event,
+            Err(_) if is_best_effort_item => continue,
+            Err(error) => {
+                return Err(RunnerError::MalformedJsonl {
+                    line: line_number,
+                    message: error.to_string(),
+                });
+            }
+        };
         let canonical =
             serde_json::to_value(&event).map_err(|error| RunnerError::MalformedJsonl {
                 line: line_number,
                 message: format!("could not normalize parsed event: {error}"),
             })?;
-        reject_ignored_fields(&value, &canonical, line_number, "")?;
+        if let Err(error) = reject_ignored_fields(&value, &canonical, line_number, "") {
+            if is_best_effort_item {
+                continue;
+            }
+            return Err(error);
+        }
         events.push(event);
     }
 
@@ -95,6 +111,16 @@ pub fn parse_thread_events(bytes: &[u8], limits: JsonlLimits) -> Result<ParsedJs
         events,
         total_bytes: bytes.len(),
     })
+}
+
+fn is_item_event(value: &Value) -> bool {
+    let Some(event_type) = value.get("type").and_then(Value::as_str) else {
+        return false;
+    };
+    matches!(
+        event_type,
+        "item.started" | "item.updated" | "item.completed"
+    )
 }
 
 /// `codex_exec::ThreadEvent` deliberately remains backwards-compatible and

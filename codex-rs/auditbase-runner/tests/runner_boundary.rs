@@ -82,11 +82,19 @@ fn raw_jsonl_is_strict_and_bounded() {
         Err(RunnerError::UnknownThreadEventField { field, .. })
             if field == "usage.future_token_class"
     ));
-    let unknown_nested_item = br#"{"type":"item.completed","item":{"id":"command-1","type":"command_execution","command":"true","aggregated_output":"","exit_code":0,"status":"completed","future_command_state":true}}"#;
+    let best_effort_item_drift = br#"{"type":"thread.started","thread_id":"thread-item-drift","model":"gpt-5","model_provider_id":"openai","reasoning_effort":"high"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"type":"error","message":"private warning without an item id"}}
+{"type":"item.completed","item":{"id":"command-1","type":"command_execution","command":"true","aggregated_output":"","exit_code":0,"status":"completed","future_command_state":true}}
+{"type":"item.updated","item":{"id":null,"type":"reasoning"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}
+"#;
+    let parsed_item_drift = parse_thread_events(best_effort_item_drift, limits())
+        .expect("item progress is best-effort");
+    assert_eq!(parsed_item_drift.events.len(), 3);
     assert!(matches!(
-        parse_thread_events(unknown_nested_item, limits()),
-        Err(RunnerError::UnknownThreadEventField { field, .. })
-            if field == "item.future_command_state"
+        parse_thread_events(br#"{"type":"turn.completed"}"#, limits()),
+        Err(RunnerError::MalformedJsonl { .. })
     ));
     assert!(matches!(
         parse_thread_events(

@@ -3,7 +3,7 @@
 AuditBase V3 is a backend-only, headless audit engine built as a maintainable
 fork of OpenAI Codex. The fork supplies Codex's repository navigation, tool
 execution, model loop, and non-interactive runtime; AuditBase supplies the
-versioned audit contract, orchestration boundary, result validation, isolation
+orchestration boundary, direct Markdown report artifact contract, isolation
 policy, and deterministic evaluation tooling.
 
 V3 is a clean implementation. It does not import the AuditBase V2/Hound audit
@@ -23,8 +23,8 @@ the operational source of truth for the implementation.
 | Component | Location | Responsibility |
 | --- | --- | --- |
 | Headless agent | `codex-rs/auditbase-agent` | Thin product binary over upstream `codex-exec`; no TUI dependency in the product graph. |
-| Public contract | `codex-rs/auditbase-contract` | Strict Rust types, semantic validators, stream/result consistency checks, generated JSON Schemas, and examples. |
-| Runner boundary | `codex-rs/auditbase-runner` | Reference-only child protocol, bounded JSONL, workspace verification, Codex launch, result validation, artifact publication, and private provenance. |
+| Public contract | `codex-rs/auditbase-contract` | Strict Rust types, semantic validators, stream contracts, generated JSON Schemas, and examples for the orchestration lane. |
+| Runner boundary | `codex-rs/auditbase-runner` | Reference-only child protocol, bounded JSONL, workspace verification, Codex launch, direct Markdown report capture, artifact publication, and private provenance. |
 | Evaluator | `codex-rs/auditbase-evaluator` | Deterministic, human-adjudicated matching and exact-rational scoring outside the agent trust boundary. |
 | Benchmark packager | `codex-rs/auditbase-benchmark` | Offline, blinded, license/contamination-gated source packaging; never runs source or exposes truth to the agent. |
 | Website/control plane | Separate `auditbase-github` repository | Auth, upload, private config, PostgreSQL state, Temporal dispatch, outbox, Redis/SSE, and terminal persistence. |
@@ -91,10 +91,10 @@ The initial scope is intentionally narrow:
   that can override the audit policy.
 - Canonical states: `queued`, `preparing`, `auditing`, `finalizing`,
   `completed`, and `failed`.
-- Structured findings, coverage, compilation evidence, limitations, usage, and
-  typed failure details.
-- Failed partial results only when a bounded, contract-valid result was actually
-  retained. A failure with no valid result does not invent one.
+- Direct Markdown report artifacts from Codex, wrapped only with audit/status,
+  usage, input-binding metadata, and typed failure details.
+- Failed partial reports only when a bounded, non-empty Markdown report was
+  actually retained. A failure with no valid report does not invent one.
 
 Public objects reject unknown fields. Paths reject absolute paths, traversal,
 backslashes, empty components, collisions after normalization, and other
@@ -152,17 +152,19 @@ bounded `auditbase.runner.v1` request from standard input and writes bounded
 normalized JSONL to standard output. Raw prompts, tool calls, command output,
 reasoning, and raw Codex JSONL stay private.
 
-Before accepting a result, the trusted-local implementation verifies the
+Before accepting a report, the trusted-local implementation verifies the
 reviewed config digest, request and workspace descriptors, every uploaded file
-digest, selected tier, configured Codex runtime, output schema, result
-semantics, request/result coverage, and artifact digests. It writes artifacts
-atomically into private paths. Successful replay is accepted only after the
-cached inputs and provenance bindings are revalidated.
+digest, selected tier, configured Codex runtime, direct-report artifact binding,
+and artifact digests. It does not run a separate finding verifier or force
+Codex through a structured finding schema. It writes artifacts atomically into
+private paths. Successful replay is accepted only after the cached inputs and
+provenance bindings are revalidated.
 
 The Codex child is launched with explicit model and reasoning settings,
 ephemeral state, strict config, no user config, no project instructions, no
-skills, no MCP servers, approval disabled, a controlled workspace, a scrubbed
-environment, and an explicit network policy. This narrows prompt-injection and
+skills unless `AUDITBASE_V3_AGENT_SKILLS` explicitly configures them, no MCP
+servers, approval disabled, a controlled workspace, a scrubbed environment, and
+an explicit network policy. This narrows prompt-injection and
 ambient-configuration risk; it is not a substitute for a separate-kernel
 production sandbox.
 
@@ -173,8 +175,10 @@ remove this protocol when changing process launch code.
 
 Trusted-local completion writes
 `control/local-run-provenance.v1.json`. It binds the requested and
-Codex-configured runtime plus agent, config, request, prompt, output-schema, and
-result digests. It is explicitly marked
+Codex-configured runtime plus agent, config, request, prompt, direct-report
+contract, and result digests. The legacy provenance field name remains
+`output_schema_sha256`, but its value now binds the direct-report contract, not
+an OpenAI structured-output schema. It is explicitly marked
 `trusted_local_only_not_benchmark_or_production` with gateway attestation
 `unavailable`; it must remain private and must never be represented as
 server-effective provenance.
@@ -207,10 +211,9 @@ npm run smoke:v3-local
 file; otherwise the harness uses `~/.codex/auth.json`. An optional absolute
 `AUDITBASE_V3_SMOKE_ROOT` retains the run under a chosen private directory. The
 harness copies auth into a fresh `CODEX_HOME`, audits only the committed
-synthetic fixture, validates the result and digest, removes the copied auth and
-runtime home, requires at least one material finding in that intentionally
-vulnerable fixture, and reports the retained private storage path. This is a
-functional sanity check, not an accuracy or recall benchmark.
+synthetic fixture, validates the direct report envelope and digest, removes the
+copied auth and runtime home, and reports the retained private storage path.
+This is a functional sanity check, not an accuracy or recall benchmark.
 
 The standalone runner deliberately returns
 `isolation_and_gateway_attestation_required` outside its exact trusted-local

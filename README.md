@@ -1,9 +1,9 @@
 > **AuditBase V3 fork:** this branch adds a backend-only smart-contract audit
 > engine on top of Codex while preserving the upstream project for maintainable
 > synchronization. See [AUDITBASE_V3_README.md](AUDITBASE_V3_README.md) for the
-> implemented architecture, trusted-local runbook, verification gates, and the
-> production fail-closed boundary. The content below is the upstream Codex
-> README.
+> implemented architecture, trusted-local runbook, direct report artifact
+> boundary, and the production fail-closed boundary. The content below is the
+> upstream Codex README.
 
 <p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
 <p align="center">

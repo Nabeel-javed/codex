@@ -219,7 +219,7 @@ fn audit_config_schema_exposes_only_the_approved_reasoning_efforts() {
         .map(|value| value.as_str().expect("reasoning effort should be a string"))
         .collect::<Vec<_>>();
 
-    assert_eq!(efforts, vec!["low", "medium", "high", "xhigh"]);
+    assert_eq!(efforts, vec!["low", "medium", "high", "xhigh", "max"]);
 }
 
 fn validate_json<T>(payload: &str)

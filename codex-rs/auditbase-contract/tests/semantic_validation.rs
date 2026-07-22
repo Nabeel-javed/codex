@@ -400,7 +400,7 @@ fn result_cap_matches_the_trusted_runner_output_boundary() {
 }
 
 #[test]
-fn tier_reasoning_effort_accepts_exact_xhigh_and_rejects_unapproved_values() {
+fn tier_reasoning_effort_accepts_exact_xhigh_and_max_and_rejects_unapproved_values() {
     let parsed: AuditConfig = toml::from_str(CONFIG).expect("xhigh should parse");
     assert_eq!(
         parsed
@@ -415,7 +415,26 @@ fn tier_reasoning_effort_accepts_exact_xhigh_and_rejects_unapproved_values() {
         "\"xhigh\""
     );
 
-    for unapproved in ["max", "ultra", "x_high"] {
+    let max_config = CONFIG.replacen(
+        "reasoning_effort = \"xhigh\"",
+        "reasoning_effort = \"max\"",
+        1,
+    );
+    let parsed: AuditConfig = toml::from_str(&max_config).expect("max should parse");
+    assert_eq!(
+        parsed
+            .tiers
+            .get("test")
+            .expect("test tier")
+            .reasoning_effort,
+        ReasoningEffort::Max
+    );
+    assert_eq!(
+        serde_json::to_string(&ReasoningEffort::Max).expect("max should serialize"),
+        "\"max\""
+    );
+
+    for unapproved in ["ultra", "x_high"] {
         let invalid = CONFIG.replacen(
             "reasoning_effort = \"xhigh\"",
             &format!("reasoning_effort = \"{unapproved}\""),

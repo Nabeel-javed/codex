@@ -54,6 +54,7 @@ pub enum ReasoningEffort {
     High,
     #[serde(rename = "xhigh")]
     XHigh,
+    Max,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]

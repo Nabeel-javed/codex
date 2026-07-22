@@ -83,7 +83,7 @@ must load the same absolute file rather than reserialize it:
   contract-size settings.
 
 The frontend sends only a tier identifier. Model identifiers and reasoning effort must not appear in browser bundles, public API responses, SSE events, audit results, or report exports.
-The closed reasoning-effort set is `low`, `medium`, `high`, and `xhigh`;
+The closed reasoning-effort set is `low`, `medium`, `high`, `xhigh`, and `max`;
 unknown values fail contract deserialization rather than falling back.
 
 Production uses `controlled_public`; benchmark jobs use `benchmark_model_only`.

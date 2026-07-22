@@ -2164,6 +2164,7 @@ fn reasoning_effort(effort: ReasoningEffort) -> &'static str {
         ReasoningEffort::Medium => "medium",
         ReasoningEffort::High => "high",
         ReasoningEffort::XHigh => "xhigh",
+        ReasoningEffort::Max => "max",
     }
 }
 
@@ -3236,7 +3237,7 @@ mod tests {
     }
 
     #[test]
-    fn xhigh_configured_runtime_is_accepted_exactly_and_detects_drift() {
+    fn xhigh_and_max_configured_runtime_are_accepted_exactly_and_detect_drift() {
         let parsed = crate::raw_jsonl::parse_thread_events(
             br#"{"type":"thread.started","thread_id":"thread-xhigh","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"xhigh","service_tier":null}"#,
             JsonlLimits {
@@ -3267,6 +3268,26 @@ mod tests {
                 .to_string()
                 .contains("reasoning effort drifted")
         );
+
+        let parsed = crate::raw_jsonl::parse_thread_events(
+            br#"{"type":"thread.started","thread_id":"thread-max","model":"gpt-test","model_provider_id":"openai","reasoning_effort":"max","service_tier":null}"#,
+            JsonlLimits {
+                max_total_bytes: 1024 * 1024,
+                max_line_bytes: 64 * 1024,
+                max_events: 100,
+            },
+        )
+        .expect("max thread metadata should parse");
+        let tier = TierConfig {
+            enabled: true,
+            model: "gpt-test".to_owned(),
+            reasoning_effort: ReasoningEffort::Max,
+            audit_timeout_minutes: 1,
+        };
+
+        let configured = super::verify_configured_runtime(&parsed.events, &tier)
+            .expect("exact max runtime should validate");
+        assert_eq!(configured.reasoning_effort, "max");
     }
 
     #[test]

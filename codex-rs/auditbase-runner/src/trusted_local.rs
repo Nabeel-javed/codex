@@ -1569,6 +1569,10 @@ fn run_agent(
         .arg("orchestrator.skills.enabled=false")
         .arg("--config")
         .arg("orchestrator.mcp.enabled=false")
+        .args(match network_access {
+            NetworkAccess::ControlledPublic => Vec::<&'static str>::new(),
+            NetworkAccess::BenchmarkModelOnly => vec!["--config", "web_search=\"disabled\""],
+        })
         .arg("--config")
         .arg("shell_environment_policy.inherit=\"none\"")
         .arg("--config")
@@ -3365,7 +3369,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
             &agent_tmp,
             &output_path,
             &tier,
-            NetworkAccess::ControlledPublic,
+            NetworkAccess::BenchmarkModelOnly,
             b"runner prompt",
             JsonlLimits {
                 max_total_bytes: 1024 * 1024,
@@ -3450,6 +3454,8 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
             "--config".to_owned(),
             "orchestrator.mcp.enabled=false".to_owned(),
             "--config".to_owned(),
+            "web_search=\"disabled\"".to_owned(),
+            "--config".to_owned(),
             "shell_environment_policy.inherit=\"none\"".to_owned(),
             "--config".to_owned(),
             format!(
@@ -3463,7 +3469,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
             "--config".to_owned(),
             "sandbox_workspace_write.exclude_slash_tmp=true".to_owned(),
             "--config".to_owned(),
-            "sandbox_workspace_write.network_access=true".to_owned(),
+            "sandbox_workspace_write.network_access=false".to_owned(),
             "-".to_owned(),
         ];
         assert_eq!(

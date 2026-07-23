@@ -9,11 +9,13 @@ use codex_auditbase_runner::child_protocol::production_rejection;
 use codex_auditbase_runner::child_protocol::trusted_real_completed_outputs;
 use codex_auditbase_runner::child_protocol::trusted_real_failed_output;
 use codex_auditbase_runner::child_protocol::trusted_real_failed_output_with_partial;
+use codex_auditbase_runner::child_protocol::trusted_real_log_output;
 use codex_auditbase_runner::child_protocol::trusted_real_progress_output;
 use codex_auditbase_runner::child_protocol::trusted_real_start_outputs;
 use codex_auditbase_runner::trusted_local::LOCAL_REAL_MODE;
+use codex_auditbase_runner::trusted_local::TrustedLocalProgress;
 use codex_auditbase_runner::trusted_local::TrustedLocalSettings;
-use codex_auditbase_runner::trusted_local::execute_trusted_local_with_progress;
+use codex_auditbase_runner::trusted_local::execute_trusted_local_with_observer;
 use codex_auditbase_runner::trusted_local::install_cancellation_handlers;
 
 fn main() -> ExitCode {
@@ -66,11 +68,18 @@ fn run() -> Result<ExitCode, String> {
         }
     };
     let mut next_sequence = 3_u64;
-    let result = execute_trusted_local_with_progress(&request, &settings, || {
+    let result = execute_trusted_local_with_observer(&request, &settings, |progress| {
         let following = next_sequence
             .checked_add(1)
-            .ok_or_else(|| "runner progress sequence overflowed".to_owned())?;
-        emit(&trusted_real_progress_output(&request, next_sequence))?;
+            .ok_or_else(|| "runner event sequence overflowed".to_owned())?;
+        match progress {
+            TrustedLocalProgress::Heartbeat => {
+                emit(&trusted_real_progress_output(&request, next_sequence))?;
+            }
+            TrustedLocalProgress::Log { message } => {
+                emit(&trusted_real_log_output(&request, next_sequence, message))?;
+            }
+        }
         next_sequence = following;
         Ok(())
     });

@@ -45,6 +45,7 @@ use codex_auditbase_contract::ValidateWithLimits;
 use codex_exec::ThreadEvent;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::Value;
 use sha2::Digest;
 use sha2::Sha256;
 use tempfile::Builder;
@@ -66,6 +67,12 @@ pub const REQUEST_SCHEMA_V1: &str = "auditbase.audit-request.v1";
 
 static CANCELLATION_REQUESTED: AtomicBool = AtomicBool::new(false);
 static SIGNAL_HANDLERS: OnceLock<Result<(), String>> = OnceLock::new();
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrustedLocalProgress {
+    Heartbeat,
+    Log { message: String },
+}
 
 pub fn install_cancellation_handlers() -> Result<(), TrustedLocalError> {
     #[cfg(unix)]
@@ -433,10 +440,21 @@ pub fn execute_trusted_local(
 pub fn execute_trusted_local_with_progress<F>(
     request: &RunnerRequestEnvelope,
     settings: &TrustedLocalSettings,
-    progress: F,
+    mut progress: F,
 ) -> Result<TrustedLocalSuccess, TrustedLocalError>
 where
     F: FnMut() -> Result<(), String>,
+{
+    execute_trusted_local_with_observer(request, settings, |_| progress())
+}
+
+pub fn execute_trusted_local_with_observer<F>(
+    request: &RunnerRequestEnvelope,
+    settings: &TrustedLocalSettings,
+    progress: F,
+) -> Result<TrustedLocalSuccess, TrustedLocalError>
+where
+    F: FnMut(TrustedLocalProgress) -> Result<(), String>,
 {
     settings.validate_host_boundary()?;
     let _audit_lock = acquire_audit_lock(request, settings)?;
@@ -1507,7 +1525,7 @@ fn run_agent(
     network_access: NetworkAccess,
     prompt: &[u8],
     jsonl_limits: JsonlLimits,
-    mut progress: impl FnMut() -> Result<(), String>,
+    mut progress: impl FnMut(TrustedLocalProgress) -> Result<(), String>,
 ) -> Result<AgentExecution, TrustedLocalError> {
     #[cfg(not(unix))]
     return Err(TrustedLocalError::internal(
@@ -1640,11 +1658,13 @@ fn run_agent(
         .ok_or_else(|| TrustedLocalError::internal("Codex stderr was not piped"))?;
     let overflow = Arc::new(AtomicBool::new(false));
     let stop_readers = Arc::new(AtomicBool::new(false));
-    let stdout_thread = spawn_bounded_reader(
+    let (stdout_line_tx, stdout_line_rx) = mpsc::channel();
+    let stdout_thread = spawn_bounded_jsonl_reader(
         stdout,
         jsonl_limits.max_total_bytes,
         Arc::clone(&overflow),
         Arc::clone(&stop_readers),
+        stdout_line_tx,
     )?;
     let stderr_thread = spawn_bounded_reader(
         stderr,
@@ -1667,7 +1687,7 @@ fn run_agent(
     let mut prompt_result = None;
     let mut prompt_failure = None;
     let mut cancelled = false;
-    let status = loop {
+    let status = 'poll: loop {
         if CANCELLATION_REQUESTED.load(Ordering::Relaxed) {
             cancelled = true;
             execution_group.kill_now()?;
@@ -1713,6 +1733,21 @@ fn run_agent(
                 }
             }
         }
+        while let Ok(line) = stdout_line_rx.try_recv() {
+            if let Some(event) = live_codex_progress_from_jsonl_line(&line) {
+                if let Err(error) = progress(event) {
+                    progress_failure = Some(error);
+                    execution_group.kill_now()?;
+                    let status = child.wait().map_err(|error| {
+                        TrustedLocalError::infrastructure(format!(
+                            "reap Codex after progress failure: {error}"
+                        ))
+                    })?;
+                    execution_group.verify_gone_after_kill()?;
+                    break 'poll status;
+                }
+            }
+        }
         if Instant::now() >= deadline {
             timed_out = true;
             execution_group.kill_now()?;
@@ -1731,7 +1766,7 @@ fn run_agent(
             break status;
         }
         if Instant::now() >= next_progress {
-            if let Err(error) = progress() {
+            if let Err(error) = progress(TrustedLocalProgress::Heartbeat) {
                 progress_failure = Some(error);
                 execution_group.kill_now()?;
                 let status = child.wait().map_err(|error| {
@@ -1808,6 +1843,65 @@ fn run_agent(
     })
 }
 
+fn live_codex_progress_from_jsonl_line(line: &[u8]) -> Option<TrustedLocalProgress> {
+    let line = line
+        .strip_suffix(b"\n")
+        .unwrap_or(line)
+        .strip_suffix(b"\r")
+        .unwrap_or(line);
+    let value: Value = serde_json::from_slice(line).ok()?;
+    let event_type = value.get("type").and_then(Value::as_str)?;
+    let message = match event_type {
+        "thread.started" => "Codex thread started.".to_owned(),
+        "turn.started" => "Codex audit turn started.".to_owned(),
+        "turn.completed" => "Codex turn completed; validating the report.".to_owned(),
+        "turn.failed" => "Codex turn failed before producing a terminal report.".to_owned(),
+        "error" => {
+            if value
+                .get("will_retry")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                "Codex stream error; retrying.".to_owned()
+            } else {
+                "Codex stream error.".to_owned()
+            }
+        }
+        "item.started" | "item.updated" | "item.completed" => {
+            let action = event_type.strip_prefix("item.").unwrap_or("updated");
+            let item_type = value
+                .get("item")
+                .and_then(|item| item.get("type"))
+                .and_then(Value::as_str)?;
+            match item_type {
+                "agent_message" => {
+                    if action == "completed" {
+                        "Codex final response completed.".to_owned()
+                    } else {
+                        return None;
+                    }
+                }
+                "reasoning" => {
+                    if action == "updated" {
+                        return None;
+                    }
+                    format!("Codex reasoning {action}.")
+                }
+                "command_execution" => format!("Repository command {action}."),
+                "file_change" => format!("Workspace change {action}."),
+                "mcp_tool_call" => format!("Tool call {action}."),
+                "collab_tool_call" => format!("Audit worker task {action}."),
+                "web_search" => format!("Public research request {action}."),
+                "todo_list" => format!("Audit plan {action}."),
+                "error" => "A recoverable Codex item error was recorded.".to_owned(),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    Some(TrustedLocalProgress::Log { message })
+}
+
 #[cfg(unix)]
 fn spawn_bounded_reader<R: Read + Send + std::os::fd::AsRawFd + 'static>(
     mut reader: R,
@@ -1844,6 +1938,67 @@ fn spawn_bounded_reader<R: Read + Send + std::os::fd::AsRawFd + 'static>(
                     total = total.saturating_add(count);
                     let remaining = limit.saturating_sub(bytes.len());
                     bytes.extend_from_slice(&buffer[..count.min(remaining)]);
+                    if total > limit {
+                        overflow.store(true, Ordering::Relaxed);
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if drain_deadline.is_some() {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(BoundedRead {
+            bytes,
+            exceeded: total > limit,
+        })
+    }))
+}
+
+#[cfg(unix)]
+fn spawn_bounded_jsonl_reader<R: Read + Send + std::os::fd::AsRawFd + 'static>(
+    mut reader: R,
+    limit: usize,
+    overflow: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>,
+    line_sender: mpsc::Sender<Vec<u8>>,
+) -> Result<thread::JoinHandle<std::io::Result<BoundedRead>>, TrustedLocalError> {
+    let fd = std::os::fd::AsRawFd::as_raw_fd(&reader);
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags == -1 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+        return Err(TrustedLocalError::infrastructure(
+            "could not make Codex output pipe nonblocking",
+        ));
+    }
+    Ok(thread::spawn(move || {
+        let mut bytes = Vec::with_capacity(limit.min(1024 * 1024));
+        let mut line = Vec::with_capacity(4096);
+        let mut buffer = [0_u8; 16 * 1024];
+        let mut total = 0_usize;
+        let mut drain_deadline = None;
+        loop {
+            if stop.load(Ordering::Relaxed) && drain_deadline.is_none() {
+                drain_deadline = Some(Instant::now() + PIPE_DRAIN_GRACE);
+            }
+            if drain_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                break;
+            }
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => {
+                    total = total.saturating_add(count);
+                    let remaining = limit.saturating_sub(bytes.len());
+                    bytes.extend_from_slice(&buffer[..count.min(remaining)]);
+                    for byte in &buffer[..count] {
+                        line.push(*byte);
+                        if *byte == b'\n' {
+                            let _ = line_sender.send(line.clone());
+                            line.clear();
+                        }
+                    }
                     if total > limit {
                         overflow.store(true, Ordering::Relaxed);
                     }
@@ -1928,6 +2083,45 @@ fn spawn_bounded_reader<R: Read + Send + 'static>(
             total = total.saturating_add(count);
             let remaining = limit.saturating_sub(bytes.len());
             bytes.extend_from_slice(&buffer[..count.min(remaining)]);
+            if total > limit {
+                overflow.store(true, Ordering::Relaxed);
+            }
+        }
+        Ok(BoundedRead {
+            bytes,
+            exceeded: total > limit,
+        })
+    }))
+}
+
+#[cfg(not(unix))]
+fn spawn_bounded_jsonl_reader<R: Read + Send + 'static>(
+    mut reader: R,
+    limit: usize,
+    overflow: Arc<AtomicBool>,
+    _stop: Arc<AtomicBool>,
+    line_sender: mpsc::Sender<Vec<u8>>,
+) -> Result<thread::JoinHandle<std::io::Result<BoundedRead>>, TrustedLocalError> {
+    Ok(thread::spawn(move || {
+        let mut bytes = Vec::with_capacity(limit.min(1024 * 1024));
+        let mut line = Vec::with_capacity(4096);
+        let mut buffer = [0_u8; 16 * 1024];
+        let mut total = 0_usize;
+        loop {
+            let count = reader.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            total = total.saturating_add(count);
+            let remaining = limit.saturating_sub(bytes.len());
+            bytes.extend_from_slice(&buffer[..count.min(remaining)]);
+            for byte in &buffer[..count] {
+                line.push(*byte);
+                if *byte == b'\n' {
+                    let _ = line_sender.send(line.clone());
+                    line.clear();
+                }
+            }
             if total > limit {
                 overflow.store(true, Ordering::Relaxed);
             }
@@ -2934,8 +3128,10 @@ mod tests {
     use super::JsonlLimits;
     use super::LoadedJob;
     use super::PrivateLocalFailureProvenance;
+    use super::TrustedLocalProgress;
     use super::TrustedLocalSettings;
     use super::bytes_sha256;
+    use super::live_codex_progress_from_jsonl_line;
     use super::run_agent;
     use super::spawn_bounded_reader;
     use super::stage_failed_partial;
@@ -2978,6 +3174,30 @@ mod tests {
             .recv_timeout(Duration::from_secs(1))
             .expect("stop must interrupt the continuous-read hot path");
         assert!(joined.expect("reader thread should not panic").is_ok());
+    }
+
+    #[test]
+    fn live_codex_progress_sanitizes_private_jsonl_items() {
+        let command = br#"{"type":"item.started","item":{"id":"command-1","type":"command_execution","command":"cat $OPENAI_API_KEY","aggregated_output":"secret","exit_code":null,"status":"in_progress"}}"#;
+        assert_eq!(
+            live_codex_progress_from_jsonl_line(command),
+            Some(TrustedLocalProgress::Log {
+                message: "Repository command started.".to_owned(),
+            })
+        );
+
+        let reasoning =
+            br#"{"type":"item.updated","item":{"id":"reasoning-1","type":"reasoning","text":"hidden reasoning"}}"#;
+        assert_eq!(live_codex_progress_from_jsonl_line(reasoning), None);
+
+        let final_message =
+            br#"{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"private final draft"}}"#;
+        assert_eq!(
+            live_codex_progress_from_jsonl_line(final_message),
+            Some(TrustedLocalProgress::Log {
+                message: "Codex final response completed.".to_owned(),
+            })
+        );
     }
 
     #[test]
@@ -3397,7 +3617,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
                 max_line_bytes: 64 * 1024,
                 max_events: 100,
             },
-            || {
+            |_| {
                 progress_calls += 1;
                 Ok(())
             },

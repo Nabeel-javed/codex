@@ -98,6 +98,8 @@ pub enum RunnerAuditEventType {
     FindingAvailable,
     #[serde(rename = "job.started")]
     JobStarted,
+    #[serde(rename = "log")]
+    Log,
     #[serde(rename = "limitation.available")]
     LimitationAvailable,
     #[serde(rename = "phase.completed")]
@@ -308,6 +310,25 @@ pub fn trusted_real_progress_output(
         Some(0),
         None,
     )
+}
+
+pub fn trusted_real_log_output(
+    request: &RunnerRequestEnvelope,
+    sequence: u64,
+    message: String,
+) -> RunnerOutput {
+    let mut output = trusted_real_event(
+        request,
+        sequence,
+        RunnerAuditEventType::Log,
+        None,
+        None,
+        None,
+    );
+    if let RunnerOutput::AuditEvent { event, .. } = &mut output {
+        event.message = Some(message);
+    }
+    output
 }
 
 pub fn trusted_real_failed_output(failure_code: &str, sequence: u64) -> RunnerOutput {

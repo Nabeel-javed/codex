@@ -1869,14 +1869,12 @@ fn live_codex_progress_from_jsonl_line(line: &[u8]) -> Option<TrustedLocalProgre
         }
         "item.started" | "item.updated" | "item.completed" => {
             let action = event_type.strip_prefix("item.").unwrap_or("updated");
-            let item_type = value
-                .get("item")
-                .and_then(|item| item.get("type"))
-                .and_then(Value::as_str)?;
+            let item = value.get("item")?;
+            let item_type = item.get("type").and_then(Value::as_str)?;
             match item_type {
                 "agent_message" => {
                     if action == "completed" {
-                        "Codex final response completed.".to_owned()
+                        "Codex message completed.".to_owned()
                     } else {
                         return None;
                     }
@@ -1887,7 +1885,12 @@ fn live_codex_progress_from_jsonl_line(line: &[u8]) -> Option<TrustedLocalProgre
                     }
                     format!("Codex reasoning {action}.")
                 }
-                "command_execution" => format!("Repository command {action}."),
+                "command_execution" => {
+                    if action == "updated" {
+                        return None;
+                    }
+                    codex_command_progress_message(item, action)
+                }
                 "file_change" => format!("Workspace change {action}."),
                 "mcp_tool_call" => format!("Tool call {action}."),
                 "collab_tool_call" => format!("Audit worker task {action}."),
@@ -1900,6 +1903,51 @@ fn live_codex_progress_from_jsonl_line(line: &[u8]) -> Option<TrustedLocalProgre
         _ => return None,
     };
     Some(TrustedLocalProgress::Log { message })
+}
+
+fn codex_command_progress_message(item: &Value, action: &str) -> String {
+    let stage = match action {
+        "started" => "Started",
+        "completed" => "Completed",
+        "updated" => "Updated",
+        _ => "Observed",
+    };
+    let command = item
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let category = if command_contains_tool(&command, &["rg", "grep"]) {
+        "searching source"
+    } else if command_contains_tool(&command, &["find", "ls", "tree"]) {
+        "listing files"
+    } else if command_contains_tool(&command, &["cat", "head", "tail", "sed", "nl"]) {
+        "reading files"
+    } else if command_contains_tool(
+        &command,
+        &[
+            "cargo", "forge", "go", "npm", "pnpm", "pytest", "yarn", "bun", "make",
+        ],
+    ) {
+        "running build or test command"
+    } else if command_contains_tool(&command, &["python", "python3", "node", "deno"]) {
+        "running local analysis"
+    } else {
+        "running repository command"
+    };
+    format!("{stage} repository command: {category}.")
+}
+
+fn command_contains_tool(command: &str, tools: &[&str]) -> bool {
+    command
+        .split(|character: char| {
+            character.is_whitespace()
+                || matches!(
+                    character,
+                    ';' | '&' | '|' | '(' | ')' | '{' | '}' | '[' | ']'
+                )
+        })
+        .any(|token| tools.iter().any(|tool| token == *tool))
 }
 
 #[cfg(unix)]
@@ -3182,9 +3230,20 @@ mod tests {
         assert_eq!(
             live_codex_progress_from_jsonl_line(command),
             Some(TrustedLocalProgress::Log {
-                message: "Repository command started.".to_owned(),
+                message: "Started repository command: reading files.".to_owned(),
             })
         );
+
+        let search_command = br#"{"type":"item.completed","item":{"id":"command-2","type":"command_execution","command":"rg -n \"transfer\" src","aggregated_output":"private","exit_code":0,"status":"completed"}}"#;
+        assert_eq!(
+            live_codex_progress_from_jsonl_line(search_command),
+            Some(TrustedLocalProgress::Log {
+                message: "Completed repository command: searching source.".to_owned(),
+            })
+        );
+
+        let command_update = br#"{"type":"item.updated","item":{"id":"command-3","type":"command_execution","command":"rg secret","aggregated_output":"private"}}"#;
+        assert_eq!(live_codex_progress_from_jsonl_line(command_update), None);
 
         let reasoning =
             br#"{"type":"item.updated","item":{"id":"reasoning-1","type":"reasoning","text":"hidden reasoning"}}"#;
@@ -3195,7 +3254,7 @@ mod tests {
         assert_eq!(
             live_codex_progress_from_jsonl_line(final_message),
             Some(TrustedLocalProgress::Log {
-                message: "Codex final response completed.".to_owned(),
+                message: "Codex message completed.".to_owned(),
             })
         );
     }
